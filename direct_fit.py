@@ -23,41 +23,32 @@ def data_load():
 
     return flip_data, t, N_cfg
 
-def fit_function(params, t):
-    """拟合函数: A0 * cosh(m0 * (t - T/2))"""
-    A0 = params['A0']
-    m0 = params['m0']
-    T = params['T']
-    return A0 * np.cosh(m0 * (t - T/2))
-
 def residual(params, t_fit, data_fit):
     """简单的残差函数，不使用协方差矩阵加权"""
     model = fit_function(params, t_fit)
     return data_fit - model
 
+
+def fit_function(params, t):
+    """使用单指数函数"""
+    A0 = params['A0']
+    m0 = params['m0']
+    return A0 * np.exp(-m0 * t)
+
 def direct_fit(t_min, t_max, t, data):
-    '''直接拟合 - 最简单版本'''
-    # 选择拟合范围
     fit_mask = (t >= t_min) & (t <= t_max)
     t_fit = t[fit_mask]
     data_fit = data[fit_mask]
     
-    print(f"拟合范围: t = {t_min} 到 {t_max}")
-    print(f"拟合点数: {len(t_fit)}")
+    # 检查数据
+    print(f"拟合数据范围: {data_fit.min():.2e} 到 {data_fit.max():.2e}")
     
-    # 设置初始参数
     params = Parameters()
-    params.add('A0', value=data_fit[0], min=0)  # 初始振幅设为第一个数据点
-    params.add('m0', value=0.5, min=0.01, max=2.0)  # 质量参数
-    params.add('T', value=96, vary=False)  # 时间周期，固定不变
+    params.add('A0', value=data_fit[0], min=0)  
+    params.add('m0', value=0.5, min=0.1, max=2.0)
     
-    # 进行拟合
     result = minimize(residual, params, method='leastsq', 
                      kws={"t_fit": t_fit, "data_fit": data_fit})
-    
-    print("="*50)
-    print("拟合结果:")
-    print(fit_report(result))
     
     return result, t_fit, data_fit
 
@@ -101,23 +92,35 @@ def check_data_quality(t, data):
     plt.show()
 
 
+def plot_result(result,mean_corr):
+    A0 = result.params['A0'].value
+    m0 = result.params['m0'].value
+
+    y =  A0 * np.exp(-m0*t)
+
+    plt.figure()
+    plt.scatter(t,np.log(y))
+    plt.scatter(t,np.log(np.abs(mean_corr)))
+    plt.show()
+
+
 if __name__ == "__main__":
     # 加载数据
     data, t, N_cfg = data_load()
     # 计算平均值（直接拟合只需要平均值）
     mean_corr = np.mean(data, axis=0)
     # 在main中调用
-    check_data_quality(t, mean_corr)
-    
-    
+    # check_data_quality(t, mean_corr)
 
-    
-    # print("数据加载完成")
+
+    print("数据加载完成")
     # print(f"数据形状: {data.shape}")
     # print(f"平均关联子前几个值: {mean_corr[:5]}")
     
-    # # 进行直接拟合
-    # result, t_fit, data_fit = direct_fit(t_min=8, t_max=16, t=t, data=mean_corr)
+    # 进行直接拟合
+    result, t_fit, data_fit = direct_fit(t_min=8, t_max=14, t=t, data=mean_corr)
+    print(fit_report(result))
     
-    # # 绘制结果
+    # 绘制结果
     # plot_fit_result(t, mean_corr, result, t_fit, data_fit)
+    plot_result(result,mean_corr)
