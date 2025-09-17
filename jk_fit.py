@@ -85,9 +85,44 @@ def improved_direct_fit(t_min, t_max, t, data):
     
     print("="*50)
     print("带误差权重的拟合结果:")
-    print(fit_report(result))
     
     return result, t_fit, data_fit, err_fit
+
+
+def test_different_fit_ranges(t, data):
+    """测试不同拟合范围的效果"""
+    ranges_to_test = [
+        (5, 16),
+        (6, 16),   # 更宽范围
+        (8, 16),   # 当前右端点扩展
+        (6, 14),   # 当前左端点扩展
+        (8, 14),   # 当前范围
+    ]
+    
+    results = []
+    for t_min, t_max in ranges_to_test:
+        print(f"\n测试拟合范围: t = {t_min} 到 {t_max}")
+        try:
+            result, t_fit, data_fit, err_fit = improved_direct_fit(t_min, t_max, t, data)
+            results.append({
+                'range': (t_min, t_max),
+                'n_points': len(t_fit),
+                'chi2_dof': result.redchi,
+                'm0': result.params['m0'].value,
+                'm0_err': result.params['m0'].stderr,
+                'A0': result.params['A0'].value,
+            })
+        except Exception as e:
+            print(f"拟合失败: {e}")
+    
+    # 比较结果
+    print("\n" + "="*80)
+    print("不同拟合范围的结果比较:")
+    print("范围\t\t点数\tχ²/dof\t\tm0\t\tm0误差\t\tA0")
+    for r in results:
+        print(f"{r['range']}\t\t{r['n_points']}\t{r['chi2_dof']:.3f}\t\t"
+              f"{r['m0']:.4f}\t\t{r['m0_err']:.5f}\t\t{r['A0']:.5f}")
+
 
 def plot_improved_fit_result(t, mean_corr, jk_err, result, t_fit, data_fit, err_fit):
     """绘制带误差棒的拟合结果"""
@@ -144,6 +179,7 @@ if __name__ == "__main__":
     
     # 使用改进的拟合方法
     result, t_fit, data_fit, err_fit = improved_direct_fit(t_min=5, t_max=16, t=t, data=data)
+    print(fit_report(result))
     
     # 计算jackknife误差用于绘图
     _, _, jk_err = jackknife_fit(0, len(t)-1, t, data)
@@ -154,3 +190,6 @@ if __name__ == "__main__":
     # 绘制结果
     # plot_fit_result(t, mean_corr, result, t_fit, data_fit)
     plot_result(result,mean_corr)
+
+    # 调用测试
+    # test_different_fit_ranges(t, data)
