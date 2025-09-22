@@ -1,3 +1,11 @@
+"""
+Name:sample_fit_cosh
+Author: George Liu
+Since: 2025.9
+Description: perform fitting & analysis on jk samples, return mean & err on paramters
+"""
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from latqcdtools.statistics.jackknife import jackknife
