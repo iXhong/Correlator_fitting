@@ -84,7 +84,7 @@ def one_state_fit(t_fit,data_fit,yerr_fit,T):
     params.add('A0',value=data_fit[0],min=0)
     params.add('m0',value=0.5,min=0)
 
-    out = minimize(residual,params=params,method='least_square',kws={"data_fit":data_fit,"t_fit":t_fit,"yerr_fit":yerr_fit,"func":fit_func_cosh,"T":T})
+    out = minimize(residual,params=params,method='least_squares',kws={"data_fit":data_fit,"t_fit":t_fit,"yerr_fit":yerr_fit,"func":fit_func_cosh,"T":T})
 
     print(fit_report(out))
 
