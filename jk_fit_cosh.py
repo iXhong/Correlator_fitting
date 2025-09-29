@@ -135,7 +135,9 @@ def plot_result(result,mean_corr):
     A0 = result.params['A0'].value
     m0 = result.params['m0'].value
 
-    y =  A0 * np.exp(-m0*t)
+    y =  A0 * np.cosh(m0*(t-T/2))
+    print(y[5:16])
+    print(mean_corr[5:16])
 
     plt.figure()
     plt.scatter(t,np.log(y))
@@ -147,6 +149,8 @@ if __name__ == "__main__":
     data, t, N_cfg = data_load()
     mean_corr = np.mean(data, axis=0)
     T = 96
+
+    # print(data)
     
     # 使用改进的拟合方法
     result, t_fit, data_fit, err_fit = improved_direct_fit(t_min=5, t_max=16, t=t, data=data,T=T)
@@ -160,3 +164,6 @@ if __name__ == "__main__":
     # 绘制结果
     # plot_fit_result(t, mean_corr, result, t_fit, data_fit)
     plot_result(result,mean_corr)
+
+    # print(data)
+    # print(t)
