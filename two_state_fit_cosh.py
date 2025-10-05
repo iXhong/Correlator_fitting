@@ -46,10 +46,11 @@ def jackknife_fit(t,t_min,t_max,data):
         return np.mean(data,axis=0)
     
     N_cfg = data.shape[0]
-
     mask = (t>=t_min) & (t<=t_max)
+
+    normalized_data = data / data[0,24]
  
-    jk_mean,jk_err = jackknife(f=func,data=data,numb_blocks=N_cfg,return_sample=False,conf_axis=0)
+    jk_mean,jk_err = jackknife(f=func,data=normalized_data,numb_blocks=N_cfg,return_sample=False,conf_axis=0)
 
     t_fit = t[mask]
     data_fit = jk_mean[mask]
@@ -68,7 +69,7 @@ def one_state_fit(t_fit,data_fit,yerr_fit,T):
     params.add('A0',value=data_fit[0],min=0)
     params.add('m0',value=0.5,min=0)
 
-    out = minimize(residual,params=params,method='least_square',kws={"data_fit":data_fit,"t_fit":t_fit,"yerr_fit":yerr_fit,"func":fit_func_cosh,"T":T})
+    out = minimize(residual,params=params,method='least_squares',kws={"data_fit":data_fit,"t_fit":t_fit,"yerr_fit":yerr_fit,"func":fit_func_cosh,"T":T})
 
     print(fit_report(out))
 
@@ -77,14 +78,40 @@ def one_state_fit(t_fit,data_fit,yerr_fit,T):
 
 def two_state_fit(t_fit,data_fit,yerr_fit,T):
     params = Parameters()
-    params.add('A0',value=data_fit[0]*0.7,min=0)
-    params.add('m0',value=0.6,min=0)
-    params.add('A1',value=data_fit[0]*0.3,min=0)
-    params.add('m1',value=1.0,min=0)
+    params.add('A0', value=2.5541e-07, min=1e-7)
+    params.add('m0', value=0.65073911, min=0.6, max=0.8)
+    params.add('A1', value=1e-10,min=0,max=1e-7) 
+    params.add('m1', value=1.0, min=0.7, max=5.0)
 
-    out = minimize(residual,params=params,method='least_square',kws={"data_fit":data_fit,"t_fit":t_fit,"yerr_fit":yerr_fit,"func":fit_func,"T":T})
+    out = minimize(residual,params=params,method='least_squares',kws={"data_fit":data_fit,"t_fit":t_fit,"yerr_fit":yerr_fit,"func":fit_func,"T":T})
 
     print(fit_report(out))
+    return out
+
+
+def out_plot(out,data,normalized):
+    if not normalized:
+        A0 = out.params['A0'].value
+        A1 = out.params['A1'].value
+        m0 = out.params['m0'].value
+        m1 = out.params['m1'].value
+    else:
+        A0 = out.params['A0'].value * data[0,24]
+        A1 = out.params['A1'].value * data[0,24]
+        m0 = out.params['m0'].value
+        m1 = out.params['m1'].value
+ 
+    def two_state_cosh(t, A0, m0, A1, m1, T):
+        """Two-state fit: ground state + first excited state"""
+        return (A0 * np.cosh(m0 * (t - T/2)) + 
+                A1 * np.cosh(m1 * (t - T/2)))
+    
+    y = two_state_cosh(t,A0,m0,A1,m1,T)
+
+    plt.figure()
+    plt.scatter(t,np.log(y))
+    plt.scatter(t,np.log(np.abs(data[0,:])))
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -95,8 +122,13 @@ if __name__ == "__main__":
     data,t,N_cfg = data_load()
     data_fit,t_fit,yerr_fit = jackknife_fit(t,t_min=tmin,t_max=tmax,data=data)
 
-    out = one_state_fit(t_fit=t_fit,data_fit=data_fit,yerr_fit=yerr_fit,T=T)
-    # two_state_fit(t_fit=t_fit,data_fit=data_fit,yerr_fit=yerr_fit,T=T)
+    # out = one_state_fit(t_fit=t_fit,data_fit=data_fit,yerr_fit=yerr_fit,T=T)
+    out = two_state_fit(t_fit=t_fit,data_fit=data_fit,yerr_fit=yerr_fit,T=T)
+
+    out_plot(out,data,True)
+
+
+
 
     
 
