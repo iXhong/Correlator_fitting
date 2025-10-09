@@ -23,12 +23,6 @@ def data_load():
 
     return flip_data, t, N_cfg
 
-def residual(params, t_fit, data_fit):
-    """简单的残差函数，不使用协方差矩阵加权"""
-    model = fit_function(params, t_fit)
-    return data_fit - model
-
-
 def fit_function(params, t):
     """使用单指数函数"""
     A0 = params['A0']
@@ -41,28 +35,17 @@ def fit_function_cosh(params,t,T):
     # T = params['T']
     return A0*np.cosh(m0*(t-T/2))
 
-def jackknife_fit(t_min, t_max, t, data):
-    """使用jackknife方法进行拟合"""
+def jackknife_fit(t_min,t_max,t,data):
     N_cfg = data.shape[0]
     fit_mask = (t >= t_min) & (t <= t_max)
     t_fit = t[fit_mask]
-    
-    # 计算平均值和jackknife误差
-    mean_corr = np.mean(data, axis=0)
-    jk_samples = []
-    
-    for i in range(N_cfg):
-        # 删除第i个配置的jackknife样本
-        jk_sample = np.mean(np.delete(data, i, axis=0), axis=0)
-        jk_samples.append(jk_sample)
-    
-    jk_samples = np.array(jk_samples)
-    
-    # 计算jackknife误差
-    jk_mean = np.mean(jk_samples, axis=0)
-    jk_err = np.sqrt((N_cfg - 1) * np.mean((jk_samples - jk_mean)**2, axis=0))
-    
-    data_fit = mean_corr[fit_mask]
+
+    def func(data):
+        return np.mean(data,axis=0)
+
+    jk_mean,jk_err = jackknife(f=func,data=data,numb_blocks=N_cfg,conf_axis=0)
+
+    data_fit = jk_mean[fit_mask]
     err_fit = jk_err[fit_mask]
     
     return t_fit, data_fit, err_fit
@@ -136,8 +119,8 @@ def plot_result(result,mean_corr):
     m0 = result.params['m0'].value
 
     y =  A0 * np.cosh(m0*(t-T/2))
-    print(y[5:16])
-    print(mean_corr[5:16])
+    # print(y[5:16])
+    # print(mean_corr[5:16])
 
     plt.figure()
     plt.scatter(t,np.log(y))
@@ -156,14 +139,14 @@ if __name__ == "__main__":
     result, t_fit, data_fit, err_fit = improved_direct_fit(t_min=5, t_max=16, t=t, data=data,T=T)
     
     # 计算jackknife误差用于绘图
-    _, _, jk_err = jackknife_fit(0, len(t)-1, t, data)
+    # _, _, jk_err = jackknife_fit(0, len(t)-1, t, data)
     
     # 绘制改进的结果
-    plot_improved_fit_result(t, mean_corr, jk_err, result, t_fit, data_fit, err_fit,T)
+    # plot_improved_fit_result(t, mean_corr, jk_err, result, t_fit, data_fit, err_fit,T)
     
     # 绘制结果
     # plot_fit_result(t, mean_corr, result, t_fit, data_fit)
-    plot_result(result,mean_corr)
+    # plot_result(result,mean_corr)
 
     # print(data)
     # print(t)
