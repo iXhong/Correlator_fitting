@@ -41,7 +41,7 @@ def fit_func_cosh(params,T,t):
     return A0*np.cosh(m0*(t-T/2))
 
 
-def jackknife_fit(t,t_min,t_max,data):
+def jk_mean_err(t,t_min,t_max,data):
     def func(data):
         return np.mean(data,axis=0)
     

@@ -28,7 +28,7 @@ def func(data):
     return np.mean(data,axis=0)
 
 
-def jackknife_fit(t_min,t_max,t,data):
+def jk_mean_err(t_min,t_max,t,data):
     N_cfg = data.shape[0]
     fit_mask = (t >= t_min) & (t <= t_max)
     t_fit = t[fit_mask]
@@ -102,7 +102,7 @@ if __name__ == "__main__":
     data, t, N_cfg = data_load()
     T = 96
 
-    t_fit, data_fit, err_fit, scale_factor = jackknife_fit(t_min=5, t_max=16, t=t, data=data)
+    t_fit, data_fit, err_fit, scale_factor = jk_mean_err(t_min=5, t_max=16, t=t, data=data)
 
     out = two_state_fit(t_fit=t_fit, data_fit=data_fit, err_fit=err_fit, T=T, scale_factor=scale_factor)
     print(fit_report(out))
@@ -129,7 +129,7 @@ if __name__ == "__main__":
 #     print(f"拟合时间点: {t_fit_check}")
 #     print(f"拟合点数: {len(t_fit_check)}")
     
-#     t_fit, data_fit, err_fit, scale_factor = jackknife_fit(t_min=t_min, t_max=t_max, t=t, data=data)
+#     t_fit, data_fit, err_fit, scale_factor = jk_mean_err(t_min=t_min, t_max=t_max, t=t, data=data)
     
 #     print(f"实际拟合点数: {len(t_fit)}")
 #     print(f"实际拟合时间点: {t_fit}")

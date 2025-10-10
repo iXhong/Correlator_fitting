@@ -38,7 +38,7 @@ def residual(params,t_fit,data_fit,err_fit):
     return (data_fit - model)/err_fit
 
 
-def jackknife_fit(t_min, t_max, t, data):
+def jk_mean_err(t_min, t_max, t, data):
     """使用jackknife方法进行拟合"""
     N_cfg = data.shape[0]
     fit_mask = (t >= t_min) & (t <= t_max)
@@ -67,7 +67,7 @@ def jackknife_fit(t_min, t_max, t, data):
 
 def two_state_fit(t_min,t_max,t,data):
     
-    t_fit, data_fit,err_fit = jackknife_fit(t_min,t_max,t,data)
+    t_fit, data_fit,err_fit = jk_mean_err(t_min,t_max,t,data)
     # 基态
     params = Parameters()
     params.add('A0', value=0.01839, min=0)
