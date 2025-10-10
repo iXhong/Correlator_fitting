@@ -35,7 +35,7 @@ def fit_function_cosh(params,t,T):
     # T = params['T']
     return A0*np.cosh(m0*(t-T/2))
 
-def jackknife_fit(t_min,t_max,t,data):
+def jk_mean_err(t_min,t_max,t,data):
     N_cfg = data.shape[0]
     fit_mask = (t >= t_min) & (t <= t_max)
     t_fit = t[fit_mask]
@@ -55,9 +55,9 @@ def weighted_residual(params, t_fit, data_fit, err_fit,T):
     model = fit_function_cosh(params, t_fit,T)
     return (data_fit - model) / err_fit  # 用误差加权
 
-def improved_direct_fit(t_min, t_max, t, data,T):
+def direct_fit(t_min, t_max, t, data,T):
     """改进的拟合函数，考虑统计误差"""
-    t_fit, data_fit, err_fit = jackknife_fit(t_min, t_max, t, data)
+    t_fit, data_fit, err_fit = jk_mean_err(t_min, t_max, t, data)
     
     print(f"拟合数据范围: {data_fit.min():.2e} 到 {data_fit.max():.2e}")
     print(f"典型误差: {np.mean(err_fit):.2e}")
@@ -77,7 +77,7 @@ def improved_direct_fit(t_min, t_max, t, data,T):
     
     return result, t_fit, data_fit, err_fit
 
-def plot_improved_fit_result(t, mean_corr, jk_err, result, t_fit, data_fit, err_fit,T):
+def plot_fit_result(t, mean_corr, jk_err, result, t_fit, data_fit, err_fit,T):
     """绘制带误差棒的拟合结果"""
     plt.figure(figsize=(12, 8))
     
@@ -136,7 +136,7 @@ if __name__ == "__main__":
     # print(data)
     
     # 使用改进的拟合方法
-    result, t_fit, data_fit, err_fit = improved_direct_fit(t_min=5, t_max=16, t=t, data=data,T=T)
+    result, t_fit, data_fit, err_fit = direct_fit(t_min=5, t_max=16, t=t, data=data,T=T)
     
     # 计算jackknife误差用于绘图
     # _, _, jk_err = jackknife_fit(0, len(t)-1, t, data)
@@ -150,3 +150,4 @@ if __name__ == "__main__":
 
     # print(data)
     # print(t)
+
