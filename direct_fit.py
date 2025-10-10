@@ -23,80 +23,104 @@ def data_load():
 
     return flip_data, t, N_cfg
 
-def residual(params, t_fit, data_fit):
-    """简单的残差函数，不使用协方差矩阵加权"""
-    model = fit_function(params, t_fit)
-    return data_fit - model
-
-
 def fit_function(params, t):
     """使用单指数函数"""
     A0 = params['A0']
     m0 = params['m0']
     return A0 * np.exp(-m0 * t)
 
-def direct_fit(t_min, t_max, t, data):
+def fit_function_cosh(params,t,T):
+    A0 = params['A0']
+    m0 = params['m0']
+    # T = params['T']
+    return A0*np.cosh(m0*(t-T/2))
+
+def jackknife_fit(t_min,t_max,t,data):
+    N_cfg = data.shape[0]
     fit_mask = (t >= t_min) & (t <= t_max)
     t_fit = t[fit_mask]
-    data_fit = data[fit_mask]
+
+    def func(data):
+        return np.mean(data,axis=0)
+
+    jk_mean,jk_err = jackknife(f=func,data=data,numb_blocks=N_cfg,conf_axis=0)
+
+    data_fit = jk_mean[fit_mask]
+    err_fit = jk_err[fit_mask]
     
-    # 检查数据
+    return t_fit, data_fit, err_fit
+
+def weighted_residual(params, t_fit, data_fit, err_fit,T):
+    """带权重的残差函数"""
+    model = fit_function_cosh(params, t_fit,T)
+    return (data_fit - model) / err_fit  # 用误差加权
+
+def improved_direct_fit(t_min, t_max, t, data,T):
+    """改进的拟合函数，考虑统计误差"""
+    t_fit, data_fit, err_fit = jackknife_fit(t_min, t_max, t, data)
+    
     print(f"拟合数据范围: {data_fit.min():.2e} 到 {data_fit.max():.2e}")
+    print(f"典型误差: {np.mean(err_fit):.2e}")
     
     params = Parameters()
     params.add('A0', value=data_fit[0], min=0)  
-    params.add('m0', value=0.5, min=0.1, max=2.0)
+    params.add('m0', value=0.5, min=0)
+    # params.add('T',value=96,vary=False)
     
-    result = minimize(residual, params, method='leastsq', 
-                     kws={"t_fit": t_fit, "data_fit": data_fit})
+    # 使用带权重的拟合
+    result = minimize(weighted_residual, params, method='least_squares', 
+                     kws={"t_fit": t_fit, "data_fit": data_fit, "err_fit": err_fit,"T":T})
     
-    return result, t_fit, data_fit
+    print("="*50)
+    print("带误差权重的拟合结果:")
+    print(fit_report(result))
+    
+    return result, t_fit, data_fit, err_fit
 
-def plot_fit_result(t, data, result, t_fit, data_fit):
-    """绘制拟合结果"""
-    plt.figure(figsize=(10, 6))
+def plot_improved_fit_result(t, mean_corr, jk_err, result, t_fit, data_fit, err_fit,T):
+    """绘制带误差棒的拟合结果"""
+    plt.figure(figsize=(12, 8))
     
-    # 绘制原始数据
-    plt.semilogy(t, data, 'bo', label='Data', markersize=4)
+    # 绘制所有数据点（带误差棒）
+    plt.errorbar(t, mean_corr, yerr=jk_err, fmt='bo', label='Data', 
+                markersize=4, capsize=3, alpha=0.7)
     
-    # 绘制拟合范围的数据（高亮显示）
-    plt.semilogy(t_fit, data_fit, 'ro', label='Fit range', markersize=6)
+    # 高亮拟合范围
+    plt.errorbar(t_fit, data_fit, yerr=err_fit, fmt='ro', label='Fit range', 
+                markersize=6, capsize=3)
     
-    # 绘制拟合曲线
+    # 拟合曲线
     t_smooth = np.linspace(t_fit[0], t_fit[-1], 100)
-    fit_curve = fit_function(result.params, t_smooth)
-    plt.semilogy(t_smooth, fit_curve, 'r-', label='Fit', linewidth=2)
+    fit_curve = fit_function_cosh(result.params, t_smooth,T)
+    plt.plot(t_smooth, fit_curve, 'r-', label='Fit', linewidth=2)
     
+    plt.yscale('log')
     plt.xlabel('t')
     plt.ylabel('G(t)')
-    plt.title('Direct Fit Result')
+    plt.title('Improved Direct Fit with Error Bars')
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.show()
-
-
-def check_data_quality(t, data):
-    """检查数据质量"""
-    print(f"数据范围: {data.min():.2e} 到 {data.max():.2e}")
-    print(f"数据是否包含负值: {np.any(data < 0)}")
-    print(f"数据是否包含零值: {np.any(data == 0)}")
-    print(f"数据是否单调递减: {np.all(np.diff(data) <= 0)}")
     
-    # 绘制数据来检查
-    plt.figure(figsize=(8, 6))
-    plt.semilogy(t, data, 'bo-')
-    plt.xlabel('t')
-    plt.ylabel('G(t)')
-    plt.title('data check')
-    plt.grid(True)
-    plt.show()
+    # 拟合质量检查
+    chi2_per_dof = result.redchi
+    print(f"\n拟合质量评估:")
+    print(f"χ²/dof = {chi2_per_dof:.3f}")
+    if chi2_per_dof < 0.1:
+        print("⚠️  χ²/dof过小，可能过拟合或误差估计过大")
+    elif chi2_per_dof > 2.0:
+        print("⚠️  χ²/dof过大，拟合质量较差")
+    else:
+        print("✅ χ²/dof合理，拟合质量良好")
 
 
 def plot_result(result,mean_corr):
     A0 = result.params['A0'].value
     m0 = result.params['m0'].value
 
-    y =  A0 * np.exp(-m0*t)
+    y =  A0 * np.cosh(m0*(t-T/2))
+    # print(y[5:16])
+    # print(mean_corr[5:16])
 
     plt.figure()
     plt.scatter(t,np.log(y))
@@ -105,22 +129,24 @@ def plot_result(result,mean_corr):
 
 
 if __name__ == "__main__":
-    # 加载数据
     data, t, N_cfg = data_load()
-    # 计算平均值（直接拟合只需要平均值）
     mean_corr = np.mean(data, axis=0)
-    # 在main中调用
-    # check_data_quality(t, mean_corr)
+    T = 96
 
-
-    print("数据加载完成")
-    # print(f"数据形状: {data.shape}")
-    # print(f"平均关联子前几个值: {mean_corr[:5]}")
+    # print(data)
     
-    # 进行直接拟合
-    result, t_fit, data_fit = direct_fit(t_min=8, t_max=14, t=t, data=mean_corr)
-    print(fit_report(result))
+    # 使用改进的拟合方法
+    result, t_fit, data_fit, err_fit = improved_direct_fit(t_min=5, t_max=16, t=t, data=data,T=T)
+    
+    # 计算jackknife误差用于绘图
+    # _, _, jk_err = jackknife_fit(0, len(t)-1, t, data)
+    
+    # 绘制改进的结果
+    # plot_improved_fit_result(t, mean_corr, jk_err, result, t_fit, data_fit, err_fit,T)
     
     # 绘制结果
     # plot_fit_result(t, mean_corr, result, t_fit, data_fit)
-    plot_result(result,mean_corr)
+    # plot_result(result,mean_corr)
+
+    # print(data)
+    # print(t)
