@@ -95,7 +95,10 @@ def sample_fit(t_fit,sample_fit,yerr_fit,T,N_cfg):
     params = Parameters()
 
     m0_list = []
+    m0_err_list = []
     A0_list = []
+    A0_err_list = []
+    redchi2 = []
    
     for i in range(N_cfg):
         data_fit = sample_fit[i,:]
@@ -103,13 +106,33 @@ def sample_fit(t_fit,sample_fit,yerr_fit,T,N_cfg):
         params.add('m0',value=0.5,min=0)
         out = minimize(residual,params=params,method='least_square',kws={"data_fit":data_fit,"t_fit":t_fit,"yerr_fit":yerr_fit,"func":fit_func_cosh,"T":T})
         m0_list.append(out.params['m0'].value)
+        m0_err_list.append(out.params['m0'].stderr)
         A0_list.append(out.params['A0'].value)
+        A0_err_list.append(out.params['A0'].stderr)
+        redchi2.append(out.redchi)
 
-    return m0_list,A0_list
+    # return m0_list,m0_err_list,A0_list,A0_err_list,redchi2
+    return {
+        'm0':m0_list,
+        'm0_err':m0_err_list,
+        'A0':A0_list,
+        'A0_err':A0_err_list,
+        'redchi2':redchi2
+    }
 
 
 def mean_func(data):
     return np.mean(data,axis=0)
+
+def jackknife_estimate(sample_value):
+    """
+    return jackknife estimate value & the uncertainty 
+    """
+    sample_value = np.array(sample_value)
+    N = len(sample_value)
+    esti_value = np.mean(sample_value)
+    esti_uncer = np.sqrt(N-1)*(np.mean(sample_value**2)-(np.mean(sample_value))**2)
+    return esti_value,esti_uncer
 
 
 if __name__ == "__main__":
@@ -118,34 +141,25 @@ if __name__ == "__main__":
     T=96
 
     data,t,N_cfg = data_load()
+    data_mean = np.mean(data,axis=0)
 
     t_fit,samp_fit,yerr_fit = get_fit_sample(t,t_min=tmin,t_max=tmax,data=data)
+    result = sample_fit(t_fit=t_fit,sample_fit=samp_fit,yerr_fit=yerr_fit,T=T,N_cfg=N_cfg)
 
-    m0_list,A0_list = sample_fit(t_fit=t_fit,sample_fit=samp_fit,yerr_fit=yerr_fit,T=T,N_cfg=N_cfg)
+    m0_list = result['m0']
+    m0_err = result['m0_err']
+    A0_list = result['A0']
+    A0_err = result['A0_err']
 
-    m0_list = np.array(m0_list)
-    A0_list = np.array(A0_list)
-
-    m0_mean,m0_err = bootstr(mean_func,data=m0_list,numb_samples=1000)
-    A0_mean,A0_err = bootstr(mean_func,data=A0_list,numb_samples=1000)
-
-    print("="*40)
-    print(f"m0_mean = {m0_mean:.4}")
-    print(f"m0_err = {m0_err:.4}")
-    print("="*40)
-    print(f"A0_mean = {A0_mean}")
-    print(f"A0_err = {A0_err}")
-
-
-
-
-
-
-    # data_fit,t_fit,yerr_fit = jackknife_fit(t,t_min=tmin,t_max=tmax,data=data)
-
-    # out = one_state_fit(t_fit=t_fit,data_fit=data_fit,yerr_fit=yerr_fit,T=T)
-    # # two_state_fit(t_fit=t_fit,data_fit=data_fit,yerr_fit=yerr_fit,T=T)
-
+    #计算jackknife fit的m0以及uncertainty
+    m0, m0_uncer = jackknife_estimate(m0_list)
+    A0, A0_uncer = jackknife_estimate(A0_list)
+    print("m0:")
+    print(m0)
+    print(m0_uncer)
+    print("A0:")
+    print(A0)
+    print(A0_uncer)
     
 
 
