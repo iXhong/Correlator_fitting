@@ -9,7 +9,6 @@ Description: perform fitting & analysis on jk samples, return mean & err on para
 import numpy as np
 import matplotlib.pyplot as plt
 from latqcdtools.statistics.jackknife import jackknife
-from latqcdtools.statistics.bootstr import bootstr
 from lmfit import minimize,Parameters, fit_report
 import glob
 
