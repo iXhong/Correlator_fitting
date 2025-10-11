@@ -159,13 +159,16 @@ def main(tmin,tmax,T,show_result=False):
         print(A0)
         print(A0_uncer)
 
-    return m0,m0_uncer
+    return {
+        "m0":m0,
+        "m0_err":m0_err
+    }
 
 
 if __name__ == "__main__":
     
     out = main(tmin=5,tmax=16,T=96)
-    print(out[0])
+    print(out['m0'])
     
 
 
