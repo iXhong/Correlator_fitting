@@ -55,7 +55,7 @@ def weighted_residual(params, t_fit, data_fit, err_fit,T):
     model = fit_function_cosh(params, t_fit,T)
     return (data_fit - model) / err_fit  # 用误差加权
 
-def direct_fit(t_min, t_max, t, data,T):
+def direct_fit(t_min, t_max, t, data,T,print_report):
     """改进的拟合函数，考虑统计误差"""
     t_fit, data_fit, err_fit = jk_mean_err(t_min, t_max, t, data)
     
@@ -71,9 +71,10 @@ def direct_fit(t_min, t_max, t, data,T):
     result = minimize(weighted_residual, params, method='least_squares', 
                      kws={"t_fit": t_fit, "data_fit": data_fit, "err_fit": err_fit,"T":T})
     
-    print("="*50)
-    print("带误差权重的拟合结果:")
-    print(fit_report(result))
+    if print_report:
+        print("="*50)
+        print("带误差权重的拟合结果:")
+        print(fit_report(result))
     
     return result, t_fit, data_fit, err_fit
 
@@ -114,7 +115,7 @@ def plot_fit_result(t, mean_corr, jk_err, result, t_fit, data_fit, err_fit,T):
         print("✅ χ²/dof合理，拟合质量良好")
 
 
-def plot_result(result,mean_corr):
+def plot_result(result,mean_corr,t,T):
     A0 = result.params['A0'].value
     m0 = result.params['m0'].value
 
@@ -128,26 +129,26 @@ def plot_result(result,mean_corr):
     plt.show()
 
 
-if __name__ == "__main__":
+def main(show_plot,print_report):
     data, t, N_cfg = data_load()
     mean_corr = np.mean(data, axis=0)
     T = 96
 
-    # print(data)
+    result, t_fit, data_fit, err_fit = direct_fit(t_min=5, t_max=16, t=t, data=data,T=T,print_report=print_report)
     
-    # 使用改进的拟合方法
-    result, t_fit, data_fit, err_fit = direct_fit(t_min=5, t_max=16, t=t, data=data,T=T)
-    
-    # 计算jackknife误差用于绘图
-    # _, _, jk_err = jackknife_fit(0, len(t)-1, t, data)
-    
-    # 绘制改进的结果
-    # plot_improved_fit_result(t, mean_corr, jk_err, result, t_fit, data_fit, err_fit,T)
-    
-    # 绘制结果
-    # plot_fit_result(t, mean_corr, result, t_fit, data_fit)
-    # plot_result(result,mean_corr)
+    if show_plot:
+        # plot_fit_result(t, mean_corr, result, t_fit, data_fit)
+        # plot_fit_result(t=t,mean_corr=mean_corr,jk_err=)
+        plot_result(result,mean_corr,t,T)
 
-    # print(data)
-    # print(t)
+    return {
+        "result":result,
+        "t_fit":t_fit,
+        "data_fit":data_fit,
+        "err_fit":err_fit
+    }
 
+
+if __name__ == "__main__":
+
+    out = main(show_plot=False,print_report=True)
