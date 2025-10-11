@@ -124,6 +124,7 @@ def sample_fit(t_fit,sample_fit,yerr_fit,T,N_cfg):
 def mean_func(data):
     return np.mean(data,axis=0)
 
+
 def jackknife_estimate(sample_value):
     """
     return jackknife estimate value & the uncertainty 
@@ -135,10 +136,7 @@ def jackknife_estimate(sample_value):
     return esti_value,esti_uncer
 
 
-if __name__ == "__main__":
-
-    tmin,tmax = 5,16
-    T=96
+def main(tmin,tmax,T,show_result=False):
 
     data,t,N_cfg = data_load()
     data_mean = np.mean(data,axis=0)
@@ -154,12 +152,21 @@ if __name__ == "__main__":
     #计算jackknife fit的m0以及uncertainty
     m0, m0_uncer = jackknife_estimate(m0_list)
     A0, A0_uncer = jackknife_estimate(A0_list)
-    print("m0:")
-    print(m0)
-    print(m0_uncer)
-    print("A0:")
-    print(A0)
-    print(A0_uncer)
+    if show_result:
+        print("m0:")
+        print(m0)
+        print(m0_uncer)
+        print("A0:")
+        print(A0)
+        print(A0_uncer)
+
+    return m0,m0_uncer
+
+
+if __name__ == "__main__":
+    
+    out = main(tmin=5,tmax=16,T=96)
+    print(out[0])
     
 
 
