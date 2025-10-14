@@ -28,11 +28,15 @@ fit_result_plot.py          比较单态和双态拟合的结果的绘图程序
 7. 拟合的初始值设定时，`m0`可以使用*有效质量*
 8. 不出问题，应该能成功✌。
 
-
+### 改变拟合区间
+```bash
+varying_tmax_5                tmax从10-24,tmin=5
+varying_tmin_48               tmin从1-20，tmax=48
+```
 
 ### 4.Todo
 
-- [x]  实现jackknife与bootstrap resample method
+- [x] 实现jackknife与bootstrap resample method
 - [x] 对exp形式函数单态拟合
 - [x] 对exp形式函数双态拟合
 - [x] 对cosh形式函数单态拟合
@@ -40,7 +44,14 @@ fit_result_plot.py          比较单态和双态拟合的结果的绘图程序
 - [ ] 变化拟合范围，尝试选择最好的拟合（select the best fit）
 
 
-### 5.Reference
+### 5.Bugs
+
+- [] jackknife fit 的实现存在严重的问题
+
+
+
+
+### 6.Reference
 1. Jackknife and Bootstrap Resampling Methods in Statistical Analysis to Correct for Bias
 2. Hadronic correlators from heavy to very  light quarks  Spectral and transport properties from lattice QCD
 3. 淬火近似下重夸克偶素热修正的格点量子色动力学研究
