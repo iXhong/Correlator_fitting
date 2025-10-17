@@ -48,13 +48,16 @@ varying_tmin_48               tmin从1-20，tmax=48
 - [x] 对cosh形式函数双态拟合
 - [ ] 变化拟合范围，绘制不同tmin下的拟合结果am0,chi2/dof以及AICC,尝试选择最好的拟合（select the best fit）
 - [ ] 使用bootstrap做拟合,并与jackknife 拟合做比较
+- [ ] jackknife/bootstrap fit 进阶
+  - [ ] correlated fit
+  - [ ] two state fit
 - [ ] 推导一下direct fit 和 jackknife fit 的误差的关系
 
 
 ### 5.Bugs
 
 - [x] jackknife fit 的实现存在严重的问题  fixed
-- [ ] Analysistoolbox中jackknife与bootstrap的使用上出错
+- [ ] 在Analysistoolbox中jackknife与bootstrap的使用上出错
 
 
 ### 6.Reference
