@@ -24,11 +24,9 @@ scan_tmax.py                固定tmin,扫描一系列tmax做拟合
 3. 计算有效质量effective mass,
 4. 从预处理后的correlator中计算y_mean和y_error
 5. 利用**最小二乘法**做拟合，我们要minimize的函数是residual
-   $$
-   \text{residual} = \frac{y_{model} - y_{data}}{y_{error}}
-   $$
+   $$\text{residual} = \frac{y_{model} - y_{data}}{y_{error}}`$$
 6. 推荐[LMfit](https://github.com/lmfit/lmfit-py)来做最小化拟合，拟合算法使用`least_squares`或者`leastsq`
-7. 拟合的初始值设定时，`m0`可以使用*有效质量*
+7. 拟合的初始值设定时，`m0`可以使用*effective mass*
 8. 不出问题，应该能成功✌。
 
 ### 3.2改变拟合区间
@@ -48,14 +46,15 @@ varying_tmin_48               tmin从1-20，tmax=48
 - [x] 对exp形式函数双态拟合
 - [x] 对cosh形式函数单态拟合
 - [x] 对cosh形式函数双态拟合
-- [ ] 变化拟合范围，尝试选择最好的拟合（select the best fit）
+- [ ] 变化拟合范围，绘制不同tmin下的拟合结果am0,chi2/dof以及AICC,尝试选择最好的拟合（select the best fit）
+- [ ] 使用bootstrap做拟合,并与jackknife 拟合做比较
+- [ ] 推导一下direct fit 和 jackknife fit 的误差的关系
 
 
 ### 5.Bugs
 
-- [] jackknife fit 的实现存在严重的问题 (似乎已经解决)
-
-
+- [x] jackknife fit 的实现存在严重的问题  fixed
+- [ ] Analysistoolbox中jackknife与bootstrap的使用上出错
 
 
 ### 6.Reference
