@@ -24,6 +24,7 @@ def jackknife_fit_tmin_scan(tmin_left,tmin_right,tmax,T):
     mass_list = []
     mass_err_list = []
     redchi_list = []
+    aicc_list = []
     tmin_list = np.arange(tmin_left,tmin_right+1,1)
 
     for tmin in tmin_list:
@@ -32,10 +33,11 @@ def jackknife_fit_tmin_scan(tmin_left,tmin_right,tmax,T):
         mass_list.append(out.params['m0'].value)
         mass_err_list.append(out.params['m0'].stderr)
         redchi_list.append(out.redchi)
+        aicc_list.append(out.aicc)
     
     # np.savez("varying_tmin.txt",tmin=tmin_list,m0=m0_j,err=m0_err_j)
 
-    return tmin_list,mass_list,mass_err_list,redchi_list
+    return tmin_list,mass_list,mass_err_list,redchi_list,aicc_list
 
 def compare_plot_dualy(tmax):
     data1 = np.load(f"direct_tmin_scan_{tmax}.npz")
@@ -96,26 +98,72 @@ def compare_plot(tmax):
     
     plt.show()
 
-def redchi_plot():
+def plot(type):
+    """
+    Plots data from 'jk_tmin_scan.npz' on two subplots of a single figure.
+    One subplot has a free y-axis scale, the other has a fixed y-axis scale (-25, 30).
+    """
     data = np.load("jk_tmin_scan.npz")
-    tmin_list,redchi = data['tmin'], data['redchi']
+    tmin_list, y = data['tmin'], data[f'{type}']
 
-    plt.figure()
-    plt.scatter(tmin_list,redchi)
+    # 创建一个包含两个子图的图形，布局为 2 行 1 列
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 10)) # 可以根据需要调整 figsize
+
+    # 第一个子图 (ax1) - 不限制 y 轴范围
+    ax1.scatter(tmin_list, y, label=f"{type}")
+    ax1.set_xlabel(r"$n_{min}$")  # x 轴标签通常只需要在最下面的子图或每个子图都加
+    ax1.set_ylabel(f"{type}")     # 添加 y 轴标签以区分子图
+    ax1.set_title("Unrestricted Y-axis") # 添加标题
+    ax1.legend()
+    # ax1 使用默认的 y 轴范围（由数据决定）
+
+    # 第二个子图 (ax2) - 限制 y 轴范围为 -25 到 30
+    ax2.scatter(tmin_list, y, label=f"{type}")
+    ax2.set_xlabel(r"$n_{min}$")
+    ax2.set_ylabel(f"{type}")     # 添加 y 轴标签
+    ax2.set_title("Restricted Y-axis (-25, 30)") # 添加标题
+    ax2.set_ylim(-25, 30)  # 应用 y 轴限制
+    ax2.legend()
+
+    # 调整子图之间的间距，防止重叠
+    plt.tight_layout()
+
+    # 显示整个图形
+    plt.savefig("jk_1_fit_aicc.png",dpi=300)
     plt.show()
 
 
+def mass_dual_y():
+
+    data2 = np.load("jk_tmin_scan.npz")
+    t_list2, m0_2, m0_err_2,redchi2,aicc2 = data2['tmin'], data2['m0'], data2['err'],data2['redchi'],data2['aicc']
+    
+    fig,ax1 = plt.subplots()
+    lines1 = ax1.errorbar(t_list2, m0_2, yerr=m0_err_2, fmt='o-', color='red', 
+                capsize=3, alpha=0.5, label=r'$am_0$')
+    ax1.set_ylabel(r"$am_0$")
+    ax2 = ax1.twinx()
+    lines2 = ax2.scatter(t_list2,redchi2,label="redchi2")
+    ax2.set_ylabel("redchi2")
+    ax2.hlines(1,xmin=1,xmax=24,linestyles='dashed',label="redchi2=1")
+    ax2.set_ylim(-5,5)
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc='best')
+
+    plt.savefig("redchi2_m_jk_1.png",dpi=300)
+    plt.show()
+
 
 if __name__ == "__main__":
-    
-    # plot_d()
-    # plotj()
-    redchi_plot()
+
+    mass_dual_y()
 
     # tmin_list,m0_d,m0_err_d = direct_fit_tmin_scan(tmin_left=1,tmin_right=24,tmax=48,T=96)
-    # tmin_list ,m0_j,m0_err_j,redchi_j = jackknife_fit_tmin_scan(tmin_left=1,tmin_right=24,tmax=48,T=96)
+    # tmin_list ,m0_j,m0_err_j,redchi_j,aicc_j = jackknife_fit_tmin_scan(tmin_left=1,tmin_right=24,tmax=48,T=96)
 
-    # np.savez("jk_tmin_scan",tmin=tmin_list,m0=m0_j,err=m0_err_j,redchi=redchi_j)
+    # np.savez("jk_tmin_scan",tmin=tmin_list,m0=m0_j,err=m0_err_j,redchi=redchi_j,aicc=aicc_j)
     # np.savez("direct_tmin_scan",tmin=tmin_list,m0=m0_d,err=m0_err_d)
 
     # plt.figure()
@@ -132,14 +180,15 @@ if __name__ == "__main__":
     # data1 = np.load("direct_tmin_scan.npz")
     # t_list1, m0_1, m0_err_1 = data1['tmin'], data1['m0'], data1['err']
 
-    # data2 = np.load("jk_tmin_scan.npz")
-    # t_list2, m0_2, m0_err_2 = data2['tmin'], data2['m0'], data2['err']
+    data2 = np.load("jk_tmin_scan.npz")
+    t_list2, m0_2, m0_err_2,redchi2 = data2['tmin'], data2['m0'], data2['err'],data2['redchi']
 
-    # plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(10, 6))
     # plt.errorbar(t_list1, m0_1, yerr=m0_err_1, fmt='s--', color='blue', 
     #             capsize=3, alpha=0.5, label='direct_tmin_scan')
-    # plt.errorbar(t_list2, m0_2, yerr=m0_err_2, fmt='o-', color='red', 
-    #             capsize=3, alpha=0.5, label='jk_tmin_scan')
+    plt.errorbar(t_list2, m0_2, yerr=m0_err_2, fmt='o-', color='red', 
+                capsize=3, alpha=0.5, label='jk_tmin_scan')
+    plt.scatter(t_list2,redchi2,)
     
     # plt.hlines(0.6,xmin=1,xmax=24,colors='black',linestyles='--')
 
