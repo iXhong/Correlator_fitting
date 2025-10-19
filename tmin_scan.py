@@ -23,6 +23,7 @@ def jackknife_fit_tmin_scan(tmin_left,tmin_right,tmax,T):
 
     mass_list = []
     mass_err_list = []
+    redchi_list = []
     tmin_list = np.arange(tmin_left,tmin_right+1,1)
 
     for tmin in tmin_list:
@@ -30,10 +31,11 @@ def jackknife_fit_tmin_scan(tmin_left,tmin_right,tmax,T):
         out = jackknife_fit.main(tmin=tmin,tmax=tmax,show_plot=False,print_report=False)
         mass_list.append(out.params['m0'].value)
         mass_err_list.append(out.params['m0'].stderr)
+        redchi_list.append(out.redchi)
     
     # np.savez("varying_tmin.txt",tmin=tmin_list,m0=m0_j,err=m0_err_j)
 
-    return tmin_list,mass_list,mass_err_list
+    return tmin_list,mass_list,mass_err_list,redchi_list
 
 def compare_plot_dualy(tmax):
     data1 = np.load(f"direct_tmin_scan_{tmax}.npz")
@@ -94,26 +96,35 @@ def compare_plot(tmax):
     
     plt.show()
 
+def redchi_plot():
+    data = np.load("jk_tmin_scan.npz")
+    tmin_list,redchi = data['tmin'], data['redchi']
+
+    plt.figure()
+    plt.scatter(tmin_list,redchi)
+    plt.show()
+
 
 
 if __name__ == "__main__":
     
     # plot_d()
     # plotj()
+    redchi_plot()
 
     # tmin_list,m0_d,m0_err_d = direct_fit_tmin_scan(tmin_left=1,tmin_right=24,tmax=48,T=96)
-    tmin_list ,m0_j,m0_err_j = jackknife_fit_tmin_scan(tmin_left=1,tmin_right=24,tmax=48,T=96)
+    # tmin_list ,m0_j,m0_err_j,redchi_j = jackknife_fit_tmin_scan(tmin_left=1,tmin_right=24,tmax=48,T=96)
 
-    # np.savez("jk_tmin_scan",tmin=tmin_list,m0=m0_j,err=m0_err_j)
+    # np.savez("jk_tmin_scan",tmin=tmin_list,m0=m0_j,err=m0_err_j,redchi=redchi_j)
     # np.savez("direct_tmin_scan",tmin=tmin_list,m0=m0_d,err=m0_err_d)
 
-    plt.figure()
+    # plt.figure()
     # plt.errorbar(tmin_list,m0_d,m0_err_d,fmt='o',linestyle='-')
-    plt.errorbar(tmin_list,m0_j,m0_err_j,fmt='o',linestyle='-')
+    # plt.errorbar(tmin_list,m0_j,m0_err_j,fmt='o',linestyle='-')
     # # plt.errorbar(tmax_list,m0_j,m0_err_j,fmt='o',linestyle='-')
-    plt.title(f"tmax={24}")
+    # plt.title(f"tmax={24}")
     # plt.ylim(0.5,0.7)
-    plt.show()
+    # plt.show()
 
     # compare_plot(48)
     # compare_plot_dualy(48)

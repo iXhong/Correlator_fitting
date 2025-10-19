@@ -84,6 +84,7 @@ def jackknife_fit(t_min: int, t_max: int, t, data, T: int, print_report: bool = 
     # 对每个 jackknife sample 做拟合
     jk_params_A0 = []
     jk_params_m0 = []
+    jk_redchi = []
     failed_fits = 0
 
     for i in range(N_blocks):
@@ -108,6 +109,7 @@ def jackknife_fit(t_min: int, t_max: int, t, data, T: int, print_report: bool = 
             if result.success:
                 jk_params_A0.append(result.params["A0"].value)
                 jk_params_m0.append(result.params["m0"].value)
+                jk_redchi.append(result.redchi)
             else:
                 failed_fits += 1
 
@@ -128,15 +130,18 @@ def jackknife_fit(t_min: int, t_max: int, t, data, T: int, print_report: bool = 
     m0_mean = np.mean(jk_params_m0)
     m0_std = np.sqrt((N_blocks - 1) * np.var(jk_params_m0, ddof=0))
 
+    redchi = np.mean(jk_redchi)
+
     # 输出
     class JackknifeResult:
-        def __init__(self, A0_mean, A0_std, m0_mean, m0_std, success_rate):
+        def __init__(self, A0_mean, A0_std, m0_mean, m0_std, redchi,success_rate):
             self.params = {
                 "A0": type("", (), {"value": A0_mean, "stderr": A0_std})(),
                 "m0": type("", (), {"value": m0_mean, "stderr": m0_std})(),
             }
             self.success = True
-            self.chisqr = None
+            self.redchi = redchi
+            self.aicc = result.aic
             self.success_rate = success_rate
 
     if print_report:
@@ -149,7 +154,7 @@ def jackknife_fit(t_min: int, t_max: int, t, data, T: int, print_report: bool = 
         print(f"m0: {m0_mean:.6f} ± {m0_std:.6f}")
 
     return JackknifeResult(
-        A0_mean, A0_std, m0_mean, m0_std, len(jk_params_A0) / N_blocks
+        A0_mean, A0_std, m0_mean, m0_std,redchi,len(jk_params_A0) / N_blocks
     )
 
 
@@ -187,6 +192,9 @@ def main(tmin, tmax, show_plot, print_report):
 
 if __name__ == "__main__":
     out = main(tmin=5, tmax=48, show_plot=False, print_report=True)
+
+    print(out.redchi)
+    # print(out.aicc)
 
     # print(f"m0:{out.params['m0'].value}")
     # print(f"A0:{out.params['A0'].value}")
