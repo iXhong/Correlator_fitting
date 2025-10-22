@@ -75,10 +75,10 @@ def bootstrap_fit(t_min: int,t_max: int,t,data,T: int,n_resamples: int = 500,pri
     bs_means = []
     for _ in range(n_resamples):
         chosen = rng.integers(0, N_cfg, N_cfg)  # 有放回重抽样
-        bs_sample = data[chosen][:, fit_mask]
-        bs_mean = np.mean(bs_sample, axis=0)
+        bs_subdata = data[chosen][:, fit_mask]  #bs resampled 
+        bs_mean = np.mean(bs_subdata, axis=0)
         bs_means.append(bs_mean)
-    bs_means = np.array(bs_means)  # shape (n_resamples, n_tfit)
+    bs_means = np.array(bs_means)  # shape (n_resamples, n_tfit) aka bootstrap samples
 
     # 全局误差（每个时间点的标准差）
     sigma_global = np.std(bs_means, axis=0, ddof=1)
