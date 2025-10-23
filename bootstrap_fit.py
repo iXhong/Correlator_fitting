@@ -1,35 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from lmfit import minimize, Parameters, fit_report
-import glob
-
-
-def data_load():
-    """ 
-    load correlator data from .dat files
-    Return:
-        flip_ fliped & averaged data
-        t: time data
-        N: number of correlator files
-    """
-   
-    file_list = sorted(glob.glob("./mass/*.dat"))
-
-    real_data_all = []
-
-    for fname in file_list:
-        data = np.loadtxt(fname, comments="#")
-        filtered = data[data[:, 3] == 0]  # 第4列是 mumu
-        real_values = filtered[:, 5]
-        real_data_all.append(real_values)
-    C_array = np.array(real_data_all)
-
-    N = C_array.shape[0]  # files num
-    flip_data = (C_array[:, :48] + np.flip(C_array[:, -48:])) / 2  # flip & average data
-    t = np.arange(flip_data.shape[1])
-    print(f"{N} 组数据，{len(t)} 个时间点")
-
-    return flip_data, t, N
+from load_data import data_load
 
 
 def fit_function_cosh(params, t, T):
@@ -45,6 +17,7 @@ def residual(params, t_fit, data_fit, err_fit, T):
     Return:
     """
     model = fit_function_cosh(params, t_fit, T)
+    # np.sum()
     return (data_fit - model) / err_fit
 
 
@@ -67,22 +40,24 @@ def bootstrap_fit(t_min: int,t_max: int,t,data,T: int,n_resamples: int = 500,pri
     """
 
     rng = np.random.default_rng(random_seed)
-    N_cfg = data.shape[0]
+    N_block = data.shape[0]
     fit_mask = (t >= t_min) & (t <= t_max)
     t_fit = t[fit_mask]
 
     # 构造 bootstrap samples (对配置取平均)
     bs_means = []
     for _ in range(n_resamples):
-        chosen = rng.integers(0, N_cfg, N_cfg)  # 有放回重抽样
+        chosen = rng.integers(0, N_block, N_block)  # 有放回重抽样
         bs_subdata = data[chosen][:, fit_mask]  #bs resampled 
         bs_mean = np.mean(bs_subdata, axis=0)
         bs_means.append(bs_mean)
     bs_means = np.array(bs_means)  # shape (n_resamples, n_tfit) aka bootstrap samples
 
     # 全局误差（每个时间点的标准差）
-    sigma_global = np.std(bs_means, axis=0, ddof=1)
-
+    sigma_global = np.sqrt(N_block/(N_block-1))*np.std(bs_means, axis=0, ddof=1)
+    print(sigma_global)
+    # sigma_global = np.std(bs_means,axis=0,ddof=1)
+    # return 0
     # 对每个 bootstrap sample 拟合
     bs_params_A0 = []
     bs_params_m0 = []
@@ -198,7 +173,7 @@ def main(tmin, tmax, show_plot, print_report, n_resamples=50):
 
 
 if __name__ == "__main__":
-    out = main(tmin=5, tmax=35, show_plot=False, print_report=True, n_resamples=10)
+    out = main(tmin=5, tmax=35, show_plot=False, print_report=True, n_resamples=100)
     
 
     # print(out.redchi)

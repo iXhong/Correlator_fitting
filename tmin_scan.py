@@ -125,7 +125,7 @@ def plot(type):
     Plots data from 'jk_tmin_scan.npz' on two subplots of a single figure.
     One subplot has a free y-axis scale, the other has a fixed y-axis scale (-25, 30).
     """
-    data = np.load("bs_tmin_scan.npz")
+    data = np.load("jk_tmin_scan.npz")
     tmin_list, y = data['tmin'], data[f'{type}']
 
     # 创建一个包含两个子图的图形，布局为 2 行 1 列
@@ -157,7 +157,7 @@ def plot(type):
 
 def mass_dual_y():
 
-    data2 = np.load("bs_tmin_scan.npz")
+    data2 = np.load("jk_tmin_scan.npz")
     t_list2, m0_2, m0_err_2,redchi2,aicc2 = data2['tmin'], data2['m0'], data2['err'],data2['redchi'],data2['aicc']
     
     fig,ax1 = plt.subplots()
@@ -165,10 +165,10 @@ def mass_dual_y():
                 capsize=3, alpha=0.5, label=r'$am_0$')
     ax1.set_ylabel(r"$am_0$")
     ax2 = ax1.twinx()
-    lines2 = ax2.scatter(t_list2,redchi2,label="redchi2")
-    ax2.set_ylabel("redchi2")
-    ax2.hlines(1,xmin=1,xmax=24,linestyles='dashed',label="redchi2=1")
-    # ax2.set_ylim(-5,5)
+    lines2 = ax2.scatter(t_list2,aicc2,label="aicc2")
+    ax2.set_ylabel("aicc2")
+    ax2.hlines(1,xmin=1,xmax=24,linestyles='dashed',label="aicc2=0")
+    ax2.set_ylim(-50,100)
 
     lines1, labels1 = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
@@ -180,8 +180,8 @@ def mass_dual_y():
 
 if __name__ == "__main__":
 
-    # mass_dual_y()
-    plot("aicc")
+    mass_dual_y()
+    # plot("aicc")
 
     # tmin_list,m0_d,m0_err_d = direct_fit_tmin_scan(tmin_left=1,tmin_right=24,tmax=48,T=96)
     # tmin_list ,m0_j,m0_err_j,redchi_j,aicc_j = jackknife_fit_tmin_scan(tmin_left=1,tmin_right=24,tmax=40,T=96)

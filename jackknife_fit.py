@@ -1,36 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from lmfit import minimize, Parameters, fit_report
-import glob
-
-
-def data_load():
-    """ 
-    load correlator data from .dat files
-    Return:
-        flip_data: fliped & averaged data
-        t: time data
-        N: number of correlator files
-    """
-   
-    file_list = sorted(glob.glob("./mass/*.dat"))
-
-    real_data_all = []
-
-    for fname in file_list:
-        data = np.loadtxt(fname, comments="#")
-        filtered = data[data[:, 3] == 0]  # 第4列是 mumu
-        real_values = filtered[:, 5]
-        real_data_all.append(real_values)
-    C_array = np.array(real_data_all)
-
-    N = C_array.shape[0]  # files num
-    flip_data = (C_array[:, :48] + np.flip(C_array[:, -48:])) / 2  # flip & average data
-    t = np.arange(flip_data.shape[1])
-    print(f"{N} 组数据，{len(t)} 个时间点")
-
-    return flip_data, t,N
-
+from load_data import data_load
 
 def fit_function_cosh(params, t, T):
     A0 = params["A0"]
@@ -79,6 +50,9 @@ def jackknife_fit(t_min: int, t_max: int, t, data, T: int, print_report: bool = 
     diffs = jk_means - jk_mean_overall
     # jackknife 方差公式 (N-1)/N * sum (diff^2)
     sigma_global = np.sqrt((N_blocks - 1) / N_blocks * np.sum(diffs**2, axis=0))
+
+    print(sigma_global)
+    # return 0
     # 这里如果要做相关拟合，也可以在这一步构造协方差矩阵 C
 
     # 对每个 jackknife sample 做拟合
@@ -194,7 +168,7 @@ def main(tmin, tmax, show_plot, print_report):
 
 
 if __name__ == "__main__":
-    out = main(tmin=5, tmax=48, show_plot=False, print_report=True)
+    out = main(tmin=5, tmax=35, show_plot=False, print_report=True)
 
     # print(out.redchi)
     print(out.aicc)

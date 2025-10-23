@@ -2,26 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from lmfit import minimize, Parameters, fit_report
 from latqcdtools.statistics.jackknife import jackknife
-import glob
-
-def data_load():    
-    file_list = sorted(glob.glob("./mass/*.dat"))
-
-    real_data_all = []
-
-    for fname in file_list:
-        data = np.loadtxt(fname, comments='#')
-        filtered = data[data[:, 3] == 0]  # 第4列是 mumu
-        real_values = filtered[:, 5]
-        real_data_all.append(real_values)
-    C_array = np.array(real_data_all)
-
-    N_cfg = C_array.shape[0] # configuration num
-    flip_data = (C_array[:,:48] + np.flip(C_array[:,-48:]))/2 #flip & average data
-    t = np.arange(flip_data.shape[1])
-    print(f'{N_cfg} 个组态，{len(t)} 个时间点')
-
-    return flip_data, t, N_cfg
+from load_data import data_load
 
 
 def func(data):

@@ -2,25 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from latqcdtools.statistics.jackknife import jackknife
 from lmfit import minimize,Parameters, fit_report
-import glob
+from load_data import data_load
 
-def data_load():    
-    file_list = sorted(glob.glob("./mass/*.dat"))
-    real_data_all = []
-
-    for fname in file_list:
-        data = np.loadtxt(fname, comments='#')
-        filtered = data[data[:, 3] == 0]
-        real_values = filtered[:, 5]
-        real_data_all.append(real_values)
-    C_array = np.array(real_data_all)
-
-    N_cfg = C_array.shape[0]
-    flip_data = (C_array[:,:48] + np.flip(C_array[:,-48:]))/2
-    t = np.arange(flip_data.shape[1])
-    print(f'{N_cfg} 个组态，{len(t)} 个时间点')
-
-    return flip_data, t, N_cfg
 
 def func(data):
     return np.mean(data,axis=0)
@@ -62,21 +45,36 @@ def two_state_fit(t_fit,data_fit,err_fit,T,scale_factor):
 
     return result
 
+
 if __name__ == "__main__":
     data, t, N_cfg = data_load()
     T = 96
 
-    t_fit, data_fit, err_fit, scale_factor = jackknife_fit(t_min=5, t_max=16, t=t, data=data)  # ⚠️ 完全按照程序2的调用方式
+    t_fit, data_fit, err_fit, scale_factor = jackknife_fit(t_min=5, t_max=16, t=t, data=data) 
 
-    out = two_state_fit(t_fit=t_fit, data_fit=data_fit, err_fit=err_fit, T=T, scale_factor=scale_factor)
-    print(fit_report(out))
+    # out = two_state_fit(t_fit=t_fit, data_fit=data_fit, err_fit=err_fit, T=T, scale_factor=scale_factor)
+    # print(fit_report(out))
 
-    print("="*50)
-    print("真实的拟合结果如下")
-    print(f"A0= {out.params['A0'].value / scale_factor:.6e}")
-    print(f"A1= {out.params['A1'].value / scale_factor:.6e}")
-    print(f"m0= {out.params['m0'].value:.6f}")
-    print(f"m1= {out.params['m1'].value:.6f}")
+    # print("="*50)
+    # print("真实的拟合结果如下")
+    # print(f"A0= {out.params['A0'].value / scale_factor:.6e}")
+    # print(f"A1= {out.params['A1'].value / scale_factor:.6e}")
+    # print(f"m0= {out.params['m0'].value:.6f}")
+    # print(f"m1= {out.params['m1'].value:.6f}")
+
+        # 新增的稳定性分析
+    t_min_list, m0_values, m0_errors = analyze_m0_stability(
+        data=data, t=t, N_cfg=N_cfg, T=T, 
+        t_max=16, t_min_range=(3, 12)
+    )
+
+    # plt.figure()
+    # plt.errorbar(t_min_list,m0_values,m0_errors,fmt='o')
+    # plt.ylim((0.6,0.65))
+    # plt.show()
+
+    # 绘制稳定性图
+    plot_m0_stability(t_min_list, m0_values, m0_errors, t_max=16)
 
 
     

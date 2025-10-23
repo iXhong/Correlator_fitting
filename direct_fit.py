@@ -2,26 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from lmfit import minimize, Parameters, fit_report
 from latqcdtools.statistics.jackknife import jackknife
-import glob
+from load_data import data_load
 
-def data_load():    
-    file_list = sorted(glob.glob("./mass/*.dat"))
-
-    real_data_all = []
-
-    for fname in file_list:
-        data = np.loadtxt(fname, comments='#')
-        filtered = data[data[:, 3] == 0]  # 第4列是 mumu
-        real_values = filtered[:, 5]
-        real_data_all.append(real_values)
-    C_array = np.array(real_data_all)
-
-    N_cfg = C_array.shape[0] # configuration num
-    flip_data = (C_array[:,:48] + np.flip(C_array[:,-48:]))/2 #flip & average data
-    t = np.arange(flip_data.shape[1])
-    print(f'{N_cfg} 个组态，{len(t)} 个时间点')
-
-    return flip_data, t, N_cfg
 
 def fit_function(params, t):
     """使用单指数函数"""
@@ -59,8 +41,8 @@ def direct_fit(t_min, t_max, t, data,T,print_report):
     """改进的拟合函数，考虑统计误差"""
     t_fit, data_fit, err_fit = jk_mean_err(t_min, t_max, t, data)
     
-    print(f"拟合数据范围: {data_fit.min():.2e} 到 {data_fit.max():.2e}")
-    print(f"典型误差: {np.mean(err_fit):.2e}")
+    # print(f"拟合数据范围: {data_fit.min():.2e} 到 {data_fit.max():.2e}")
+    # print(f"典型误差: {np.mean(err_fit):.2e}")
     
     params = Parameters()
     params.add('A0', value=data_fit[0], min=0)  
@@ -134,7 +116,7 @@ def main(show_plot,print_report):
     mean_corr = np.mean(data, axis=0)
     T = 96
 
-    result, t_fit, data_fit, err_fit = direct_fit(t_min=5, t_max=16, t=t, data=data,T=T,print_report=print_report)
+    result, t_fit, data_fit, err_fit = direct_fit(t_min=5, t_max=48, t=t, data=data,T=T,print_report=print_report)
     
     if show_plot:
         # plot_fit_result(t, mean_corr, result, t_fit, data_fit)
@@ -152,3 +134,5 @@ def main(show_plot,print_report):
 if __name__ == "__main__":
 
     out = main(show_plot=False,print_report=True)
+    # filp_data,t,N = data_load()
+    # print(filp_data.shape)
