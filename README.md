@@ -57,6 +57,7 @@ varying_tmin_48               tmin从1-20，tmax=48
 ### 5.Bugs
 
 - [x] jackknife fit 的实现存在严重的问题  fixed
+- [x] data_load() 中对原始的correlator数据进行对折取平均的时候出错[7.1](#71-对correlator-取平均)
 - [ ] 在Analysistoolbox中jackknife与bootstrap的使用上出错
 
 
@@ -64,3 +65,19 @@ varying_tmin_48               tmin从1-20，tmax=48
 1. Jackknife and Bootstrap Resampling Methods in Statistical Analysis to Correct for Bias
 2. Hadronic correlators from heavy to very  light quarks  Spectral and transport properties from lattice QCD
 3. 淬火近似下重夸克偶素热修正的格点量子色动力学研究
+
+--- 
+### 7. 备注
+
+#### 7.1 对correlator 取平均
+目前我的correlator是T=96,序列是(0-95),我原来的错误处理方法是直接对折取平均,导致0和95,1和94,...,47和48取平均,这么做是错的.
+在格点 QCD 或类似时间相关关联函数分析中，常见的时间关联函数
+$$C(t)=⟨O(t)O†(0)⟩$$
+满足周期性边界条件（periodic BC）：
+$$C(t)=C(T−t)$$
+这里T是时间方向的总长度（例如T=96）。
+
+因此我们在分析时，可以只保留一半（0 到 T/2）区间的数据，因为另一半是镜像。
+对称化（folding）就是取
+$$C_{fold}(t)=\frac{1}{2}[C(t)+C(T−t)]$$
+所以$C_{fold}(0)=\frac{1}{2}[C(0)+C(96−0)]$,所以0应该和96对应,可以想象为一个圆环,首尾相接,所以96号点就是0号点,C(t=0)与他自己对应而不是C(t=95),最终剩下t=48时,T-t = 48,所以t=48也是和自己对应.
