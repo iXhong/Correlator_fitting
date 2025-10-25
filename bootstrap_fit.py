@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from lmfit import minimize, Parameters, fit_report
 from load_data import data_load
+import seaborn as sns
 
 
 def fit_function_cosh(params, t, T):
@@ -19,10 +20,6 @@ def residual(params, t_fit, data_fit, err_fit, T):
     model = fit_function_cosh(params, t_fit, T)
     # np.sum()
     return (data_fit - model) / err_fit
-
-
-import numpy as np
-from lmfit import minimize, Parameters
 
 
 def bootstrap_fit(t_min: int,t_max: int,t,data,T: int,n_resamples: int = 500,print_report: bool = True,random_seed: int = 1234):
@@ -55,7 +52,6 @@ def bootstrap_fit(t_min: int,t_max: int,t,data,T: int,n_resamples: int = 500,pri
 
     # 全局误差（每个时间点的标准差）
     sigma_global = np.sqrt(N_block/(N_block-1))*np.std(bs_means, axis=0, ddof=1)
-    print(sigma_global)
     # sigma_global = np.std(bs_means,axis=0,ddof=1)
     # return 0
     # 对每个 bootstrap sample 拟合
@@ -112,7 +108,7 @@ def bootstrap_fit(t_min: int,t_max: int,t,data,T: int,n_resamples: int = 500,pri
 
     # 输出结构类
     class BootstrapResult:
-        def __init__(self, A0_mean, A0_std, m0_mean, m0_std, redchi, aicc, success_rate):
+        def __init__(self, A0_mean, A0_std, m0_mean, m0_std, redchi, aicc, success_rate,bs_params_m0):
             self.params = {
                 "A0": type("", (), {"value": A0_mean, "stderr": A0_std})(),
                 "m0": type("", (), {"value": m0_mean, "stderr": m0_std})(),
@@ -121,6 +117,7 @@ def bootstrap_fit(t_min: int,t_max: int,t,data,T: int,n_resamples: int = 500,pri
             self.redchi = redchi
             self.aicc = aicc
             self.success_rate = success_rate
+            self.bs_params_m0 = bs_params_m0
 
     if print_report:
         print("=" * 50)
@@ -139,6 +136,7 @@ def bootstrap_fit(t_min: int,t_max: int,t,data,T: int,n_resamples: int = 500,pri
         redchi,
         aicc,
         len(bs_params_A0) / n_resamples,
+        bs_params_m0
     )
 
 
@@ -171,10 +169,25 @@ def main(tmin, tmax, show_plot, print_report, n_resamples=50):
 
     return result
 
+def plot_hist(out):
+    
+    m0_list = out.bs_params_m0
+    m0_median = np.median(m0_list)
+
+    plt.style.use('seaborn-v0_8-whitegrid')
+    sns.set_context("talk")
+    plt.figure()
+    plt.hist(m0_list,bins='fd',density=True,alpha=0.6,label="m0")
+    plt.vlines(x=m0_median,ymin=0,ymax=40,colors='black',label=f"m0 median value={m0_median:.2f}")
+    plt.xlabel(r"$m_0$")
+    plt.ylabel(r"Times")
+    plt.legend()
+    plt.savefig("hist_bs_m0.png",dpi=300)
+    plt.show()
+
 
 if __name__ == "__main__":
-    out = main(tmin=5, tmax=35, show_plot=False, print_report=True, n_resamples=100)
+
+    out = main(tmin=5, tmax=35, show_plot=False, print_report=True, n_resamples=1000)
     
 
-    # print(out.redchi)
-    # print(out.aicc)
