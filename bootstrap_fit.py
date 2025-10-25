@@ -97,10 +97,12 @@ def bootstrap_fit(t_min: int,t_max: int,t,data,T: int,n_resamples: int = 500,pri
     bs_params_A0 = np.array(bs_params_A0)
     bs_params_m0 = np.array(bs_params_m0)
 
-    A0_mean = np.mean(bs_params_A0)
+    # A0_mean = np.mean(bs_params_A0)
+    A0_med = np.median(bs_params_A0)
     A0_std = np.std(bs_params_A0, ddof=1)
 
-    m0_mean = np.mean(bs_params_m0)
+    # m0_mean = np.mean(bs_params_m0)
+    m0_med = np.median(bs_params_m0)
     m0_std = np.std(bs_params_m0, ddof=1)
 
     redchi = np.mean(bs_redchi)
@@ -108,10 +110,10 @@ def bootstrap_fit(t_min: int,t_max: int,t,data,T: int,n_resamples: int = 500,pri
 
     # 输出结构类
     class BootstrapResult:
-        def __init__(self, A0_mean, A0_std, m0_mean, m0_std, redchi, aicc, success_rate,bs_params_m0):
+        def __init__(self, A0_med, A0_std, m0_med, m0_std, redchi, aicc, success_rate,bs_params_m0):
             self.params = {
-                "A0": type("", (), {"value": A0_mean, "stderr": A0_std})(),
-                "m0": type("", (), {"value": m0_mean, "stderr": m0_std})(),
+                "A0": type("", (), {"value": A0_med, "stderr": A0_std})(),
+                "m0": type("", (), {"value": m0_med, "stderr": m0_std})(),
             }
             self.success = True
             self.redchi = redchi
@@ -125,13 +127,13 @@ def bootstrap_fit(t_min: int,t_max: int,t,data,T: int,n_resamples: int = 500,pri
         print(
             f"成功率: {len(bs_params_A0)}/{n_resamples} ({100 * len(bs_params_A0) / n_resamples:.1f}%)"
         )
-        print(f"A0: {A0_mean} ± {A0_std}")
-        print(f"m0: {m0_mean:.6f} ± {m0_std:.6f}")
+        print(f"A0: {A0_med} ± {A0_std}")
+        print(f"m0: {m0_med:.6f} ± {m0_std:.6f}")
 
     return BootstrapResult(
-        A0_mean,
+        A0_med,
         A0_std,
-        m0_mean,
+        m0_med,
         m0_std,
         redchi,
         aicc,
@@ -170,7 +172,7 @@ def main(tmin, tmax, show_plot, print_report, n_resamples=50):
     return result
 
 def plot_hist(out):
-    
+
     m0_list = out.bs_params_m0
     m0_median = np.median(m0_list)
 
@@ -188,6 +190,6 @@ def plot_hist(out):
 
 if __name__ == "__main__":
 
-    out = main(tmin=5, tmax=35, show_plot=False, print_report=True, n_resamples=1000)
+    out = main(tmin=5, tmax=35, show_plot=False, print_report=True, n_resamples=100)
     
 
