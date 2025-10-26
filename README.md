@@ -14,6 +14,8 @@ two_state_fit.py            使用cosh型函数，做双态拟合
 fit_result_plot.py          比较单态和双态拟合的结果的绘图程序
 scan_tmin.py                固定tmax,扫描一系列tmin做拟合
 scan_tmax.py                固定tmin,扫描一系列tmax做拟合
+jk_2_cosh_fit.py            jackknife 2 state fit
+bs_2_cosh_fit.py            bootstrap 2 state fit
 ```
 
 ### 3.内容
