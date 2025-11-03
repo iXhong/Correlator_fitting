@@ -9,7 +9,7 @@ from src.fitting.base_fit import FitResult,FitMethod
 from lmfit import Parameters,minimize
 
 
-class JackknifeFit(FitMethod):
+class JackknifeOneStateFit(FitMethod):
 
     def _init_params(self, data_fit) -> Parameters:
         # initialize fit parameters

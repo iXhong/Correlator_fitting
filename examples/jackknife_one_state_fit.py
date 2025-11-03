@@ -1,4 +1,4 @@
-from src.fitting.jackknife_fit import JackknifeFit
+from src.fitting.jackknife_fit import JackknifeOneStateFit
 from src.models.model_functions import one_cosh_func
 from src.models.residuals import make_uncorrelated_residual
 from src.utils.io import load_data
@@ -13,7 +13,7 @@ data_masked = data[:,mask]
 t_masked = t[mask]
 jk_samples, jk_mean,jk_err = jackknife_resample(data=data_masked,return_samples=True)
 
-jk = JackknifeFit(model_func=one_cosh_func,residual_func=residual)
+jk = JackknifeOneStateFit(model_func=one_cosh_func,residual_func=residual)
 result = jk.fit(t_fit=t_masked,T=96,jk_samples=jk_samples,sigma=jk_err,residual=residual,print_report=True)
 
 # print("拟合结果:")
