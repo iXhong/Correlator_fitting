@@ -5,6 +5,17 @@ description = "two point correlator fitting"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "black>=25.9.0",
     "latqcdtools>=1.3.0",
     "lmfit>=1.3.4",
+    "pylint>=4.0.2",
+    "pyright>=1.1.407",
 ]
+
+[tool.black]
+line-length = 88
+target-version = ['py313']
+
+[tool.pyright]
+pythonVersion = "3.13"
+include = ["src","examples"]
