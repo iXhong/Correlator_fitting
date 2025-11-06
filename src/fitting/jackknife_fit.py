@@ -21,7 +21,16 @@ class JackknifeOneStateFit(FitMethod):
     def _run_fit(
         self, t_fit, T, jk_samples, sigma, residual, print_report=True
     ) -> FitResult:
-        # main jackknife fit routine for one-state model
+        """
+        main jackknife fit routine for one-state model
+        :param t_fit:
+        :param T:
+        :param jk_samples:
+        :param sigma:
+        :param residual:
+        :param print_report:
+        :return:
+        """
         N_blocks = jk_samples.shape[0]
 
         jk_params_A0 = []
@@ -45,6 +54,7 @@ class JackknifeOneStateFit(FitMethod):
                         "t_fit": t_fit,
                         "data_fit": jk_data_fit,
                         "err_fit": sigma,
+                        # "cov_matrix": cov_matrix,
                         "T": T,
                     },
                 )
