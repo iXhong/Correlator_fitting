@@ -8,7 +8,7 @@ import numpy as np
 import glob
 
 
-def load_data(path,mumu):
+def load_data(path, mumu):
     """
     load correlator data from .dat files
     Return:
@@ -44,10 +44,27 @@ def load_data(path,mumu):
     t = np.arange(n_half)
     print(f"{N} 组数据，{len(t)} 个时间点 (折叠后，T={T})")
 
-    return flip_data, t, N
+    return flip_data
+
+
+def load_zeromom_data(path):
+    """
+    load zero-momentum correlator data from .dat files
+    Return:
+        zeromom_data: folded & averaged data per config
+        t: time data (0 .. T//2)
+        N: number of correlator files
+    """
+    mumus = [0, 1, 2]
+    data = np.zeros((15, 49))
+    for mumu in mumus:
+        data += load_data(path, mumu)
+    print(f"load all {len(mumus)} mumu data.")
+    return data / 3
 
 
 if __name__ == "__main__":
-    flip_data, t, N = load_data(path="../data/raw/mass",mumu=0)
+    # flip_data, t, N = load_data(path="../data/raw/mass", mumu=0)
 
-    print(flip_data.shape)
+    # print(flip_data.shape)
+    data = load_zeromom_data(path="./data/raw/mass")
