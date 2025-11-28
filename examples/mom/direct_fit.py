@@ -42,7 +42,10 @@ def one_state_direct_fit(t_fit, y_fit, y_err_fit, T, initial_params, bounds):
         method="trf",
     )
 
-    _, redchi2, _ = compute_chi2_red(result, len(y_fit), len(initial_params))
+    redchi2 = compute_chi2_red(result, len(y_fit), len(initial_params))
+    # redchi2 = compute_chi2_red_manual(
+    #     {"A0": result.x[0], "m0": result.x[1]}, t_fit, y_fit, y_err_fit, T
+    # )
 
     fitted_params = {"A0": result.x[0], "m0": result.x[1]}
     return fitted_params, result.cost, result.message, redchi2
@@ -65,7 +68,7 @@ def two_state_direct_fit(t_fit, y_fit, y_err_fit, T, initial_params, bounds):
         method="trf",
     )
 
-    _, redchi2, _ = compute_chi2_red(result, len(y_fit), len(initial_params))
+    redchi2 = compute_chi2_red(result, len(y_fit), len(initial_params))
 
     fitted_params = {
         "A0": result.x[0],
@@ -73,6 +76,8 @@ def two_state_direct_fit(t_fit, y_fit, y_err_fit, T, initial_params, bounds):
         "A1": result.x[2],
         "m1": result.x[3],
     }
+    # redchi2 = compute_chi2_red_manual(fitted_params, t_fit, y_fit, y_err_fit, T)
+
     return fitted_params, result.cost, result.message, redchi2
 
 
@@ -84,10 +89,34 @@ def load_p2_data(path):
 
 
 def compute_chi2_red(result, n_data, n_params):
-    chi2 = 2 * result.cost
+    # chi2 = 2 * result.cost
     dof = n_data - n_params
+    redchi2 = np.sum(result.fun**2) / dof
+    print(f"n_data: {n_data}, n_params: {n_params}")
+    print(f"chi2: {np.sum(result.fun**2)}, dof: {dof}")
+    return redchi2
+
+
+# manually calculate reduced chi2 to avoid confusion
+def compute_chi2_red_manual(fitted_params, t_fit, y_fit, y_err_fit, T):
+    # model = one_cosh_func([fitted_params["A0"], fitted_params["m0"]], t_fit, T)
+    model = two_cosh_func(
+        [
+            fitted_params["A0"],
+            fitted_params["m0"],
+            fitted_params["A1"],
+            fitted_params["m1"],
+        ],
+        t_fit,
+        T,
+    )
+    residuals = (y_fit - model) / y_err_fit
+    chi2 = np.sum(residuals**2)
+    dof = len(y_fit) - len(fitted_params)
     redchi2 = chi2 / dof
-    return chi2, redchi2, dof
+    print(f"n_data: {len(y_fit)}, n_params: {len(fitted_params)}")
+    print(f"chi2: {chi2}, dof: {dof}")
+    return redchi2
 
 
 def result_plot(t, y_mean, y_err, fitted_params, T, state="one"):
@@ -228,7 +257,6 @@ def run_one_state_fit(
         t_fit, y_fit, y_err_fit, T, initial_params, bounds
     )
     print("Fitted Parameters:", fitted_params)
-    print("Cost:", cost)
     print("Message:", message)
     print("Reduced Chi-squared:", redchi2)
 
@@ -252,8 +280,10 @@ def run_two_state_fit(
     y_fit = y_mean[mask]
     y_err_fit = y_err[mask]
 
-    initial_params = {"A0": 1e-15, "m0": 0.62, "A1": 1e-17, "m1": 1}
-    bounds = ([0, 0.55, 0, 0.8], [1e-14, 0.65, 1e-15, 1.4])
+    # initial_params = {"A0": 1e-15, "m0": 0.62, "A1": 1e-17, "m1": 1}
+    # bounds = ([0, 0.55, 0, 0.8], [1e-14, 0.65, 1e-15, 1.4])
+    initial_params = {"A0": 3.65e-15, "m0": 0.5961, "A1": 2.84e-25, "m1": 1.10}
+    bounds = ([0, 0.55, 0, 0.8], [1e-14, 0.65, 1e-24, 1.3])
     fitted_params, cost, message, redchi2 = two_state_direct_fit(
         t_fit, y_fit, y_err_fit, T, initial_params, bounds
     )
@@ -261,33 +291,30 @@ def run_two_state_fit(
     print("Cost:", cost)
     print("Message:", message)
     print("Reduced Chi-squared:", redchi2)
+    # p = {
+    #     "A0": 3.896858182461145e-15,
+    #     "m0": 0.594678519259444,
+    #     "A1": 3.990648266755961e-20,
+    #     "m1": 0.942520079075724,
+    # }
 
-    # result_plot(t, y_mean, y_err, fitted_params, T)
+    # # result_plot(t, y_mean, y_err, fitted_params, T)
     result_plot(t, y_mean, y_err, fitted_params, T, state="two")
 
 
 if __name__ == "__main__":
 
-    path = "./data/processed/mom/p2_bs_mean_err/phi_p2_0_mean_err.dat"
-
-    # run_one_state_fit(path=path, T=96, tmin=5, tmax=16)
-    run_two_state_fit(path=path, T=96, tmin=5, tmax=30)
-
-    # plt.figure(figsize=(8, 5))
-    # plt.errorbar(t, y_mean, y_err, fmt="o", label=r"$data\ \hat{p}^2=0$", markersize=4)
-    # t_plot = np.linspace(0, 48, 100)
-    # y_plot = one_cosh_func([fitted_params["A0"], fitted_params["m0"]], t_plot, T)
-    # plt.plot(t_plot, y_plot, label="Fitted One-Cosh", color="red")
-    # plt.xlabel(r"$\tau/a$")
-    # plt.ylabel(r"$G(\tau)$")
-    # plt.yscale("log")
-    # plt.figtext(
-    #     0.15,
-    #     0.8,
-    #     rf"A0 = {fitted_params['A0']:.3e}\n $am_0$ = {fitted_params['m0']:.5f}\n",
-    #     bbox=dict(facecolor="white", alpha=0.5),
+    # data = np.load("./data/processed/mom/bs_samples/phi_p2_0_bs.npy")
+    # mean = np.mean(data, axis=0)
+    # err = np.std(data, axis=0, ddof=1)
+    # np.savetxt(
+    #     "./data/processed/mom/p2_bs_mean_err/phi_p2_0_mean_err.dat",
+    #     np.column_stack((mean, err)),
     # )
-    # plt.title("One-State Direct Fit, p^2=0")
-    # plt.legend()
-    # plt.grid()
-    # plt.show()
+
+    run_two_state_fit(
+        path="./data/processed/mom/p2_bs_mean_err/phi_p2_0_mean_err.dat",
+        T=96,
+        tmin=3,
+        tmax=30,
+    )

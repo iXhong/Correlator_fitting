@@ -121,9 +121,10 @@ def fold_single_correlator(C, T):
     half = T // 2
     Cf = np.zeros(half + 1)
 
-    for t in range(half):
-        Cf[t] = 0.5 * (C[t] + C[T - t - 1])
+    for t in range(1, half):
+        Cf[t] = 0.5 * (C[t] + C[T - t])
     Cf[half] = C[half]
+    Cf[0] = C[0]
 
     return Cf
 
