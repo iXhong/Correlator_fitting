@@ -12,12 +12,22 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-from bootstrap_fit_fixed import (
+# from bootstrap_fit_fixed import (
+#     scan_tmin_one_state,
+#     scan_tmin_two_state,
+#     get_bootstrap_m0,
+#     select_best_fit_by_aicc,
+#     get_bootstrap_m0,
+#     get_best_m0_sequence,
+#     plot_plateau,
+#     weighted_plateau_average,
+# )
+
+from bootstrap_correlated_fit import (
     scan_tmin_one_state,
     scan_tmin_two_state,
     get_bootstrap_m0,
     select_best_fit_by_aicc,
-    get_bootstrap_m0,
     get_best_m0_sequence,
     plot_plateau,
     weighted_plateau_average,
@@ -37,8 +47,8 @@ TMIN_END = 24
 TMAX_FIXED = 30
 
 # 4. 拟合结果输出目录（分别存放 one-state / two-state 扫描）
-ONE_STATE_DIR = "./data/processed/mom2/bs_fit_results/scan_one_state"
-TWO_STATE_DIR = "./data/processed/mom2/bs_fit_results/scan_two_state"
+ONE_STATE_DIR = "./data/processed/mom/bs_fit_results/scan_one_state_corr"
+TWO_STATE_DIR = "./data/processed/mom/bs_fit_results/scan_two_state_corr"
 
 # 5. plateau 区间（用 tmin 的值来表示）
 PLATEAU_LEFT = 9  # 最左侧的 tmin
@@ -125,7 +135,7 @@ def plot_m0_selected():
     plt.show()
 
 
-def average_plateau_m0():
+def average_plateau_m0(tmin, tmax):
     best_fit = select_best_fit_by_aicc(ONE_STATE_DIR, TWO_STATE_DIR)
     m0_one = get_bootstrap_m0(ONE_STATE_DIR)
     m0_two = get_bootstrap_m0(TWO_STATE_DIR)
@@ -133,12 +143,13 @@ def average_plateau_m0():
     tmin_vals, m0_best, m0_err = get_best_m0_sequence(best_fit, m0_one, m0_two)
 
     # plateau averaging
-    tmin = 5
-    tmax = 25
+    # tmin = 5
+    # tmax = 25
 
     n_lower = tmin_vals.index(tmin)
     n_upper = tmin_vals.index(tmax)
-    plot_plateau(
+    print(n_lower, n_upper)
+    m_avg, stat_err, sys_err = plot_plateau(
         n_list=tmin_vals,
         m_vals=m0_best,
         m_errs=m0_err,
@@ -148,10 +159,22 @@ def average_plateau_m0():
         ylabel=r"a$m_0$",
         outpath=None,
     )
+    return m_avg, stat_err, sys_err
+
+
+def convert_result(am0_mean, sys_err, stat_err):
+    total_err = np.sqrt(sys_err**2 + stat_err**2)
+    a = 0.117
+
+    m0 = am0_mean / a * 197.3269804  # MeV
+    m0_err = total_err / a * 197.3269804  # MeV
+    return m0, m0_err
 
 
 if __name__ == "__main__":
 
     # scan_tmin()
     # plot_m0_selected()
-    average_plateau_m0()
+    m_avg, stat_err, sys_err = average_plateau_m0(tmin=4, tmax=24)
+    m0, m0_err = convert_result(m_avg, stat_err, sys_err)
+    print(f"Final m0 = {m0:.2f} ± {m0_err:.2f} MeV (stat+sys)")

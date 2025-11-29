@@ -19,24 +19,25 @@ mumu 平均（1,2,3 → φ meson spatial 平均）
 ↓
 对所有的.dat 做上面的处理，
 得到新的关于(p^2,t)的关联函数数据文件
-(上述功能在 load_data.py 中实现）
+(上述功能在 load_data.py 中实现 保存到p2_sorted/）
 
 ───────────── all dat （所有配置） ─────────────
 
 stack 所有 config 的 G(p²,t)
 ↓
-bootstrap / jackknife
+bootstrap / jackknife   (bs_resample.py 保存samples 到bs_samples)
 ↓
-得到 samples, mean, error
+得到 samples, mean, error  (fold_average.py)
 ↓
 绘制 errorbar of G
 ↓
-effective mass of per bs samples
+effective mass of per bs samples   (effective_mass.py)
 ↓
 plot errorbar of effective mass
 ↓
 find the plateau & get the approximate mass
 ───────────── 拟合阶段 ─────────────
+(bootstrap_fit_fixed.py)
 计算总的(N_b,T)的 bs samples 的 Covriance Matrix/error 作为后续拟合的 sigma
 ↓
 对每一个 bs sample 做单态拟合,利用每一次拟合得到的参数计算 y_fit,并绘制图像

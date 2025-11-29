@@ -1,243 +1,116 @@
 """
-Description: bootstrap fit for one state and two state cosh functions
+bootstrap_correlated_fit.py
+
+Description: bootstrap *correlated* fit for one-state and two-state cosh functions.
+             Uses covariance matrix from bootstrap samples and Cholesky-based
+             correlated residuals.
+
 @author: George Liu
-@since: 2025.11.19
+@since: 2025.11.29
 """
 
 import os
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 from scipy.optimize import least_squares
 
-from plot import plot_histogram
 
-
+# ----------------------------------------------------------------------
+#  模型函数
+# ----------------------------------------------------------------------
 def one_cosh_func(params, t, T):
-    # params is ndarray: [A0, m0]
+    """
+    One-state cosh correlator:
+        C(t) = A0 * cosh(m0 * (t - T/2))
+    params: [A0, m0]
+    """
     A0, m0 = params
     return A0 * np.cosh(m0 * (t - T / 2))
 
 
 def two_cosh_func(params, t, T):
-    # params is ndarray: [A0, m0, A1, m1]
+    """
+    Two-state cosh correlator:
+        C(t) = A0 * cosh(m0 * (t - T/2)) + A1 * cosh(m1 * (t - T/2))
+    params: [A0, m0, A1, m1]
+    """
     A0, m0, A1, m1 = params
     return A0 * np.cosh(m0 * (t - T / 2)) + A1 * np.cosh(m1 * (t - T / 2))
 
 
-def residuals_one_cosh(params, t_data, y_data, y_err, T):
-    model = one_cosh_func(params, t_data, T)
-    return (y_data - model) / y_err
+# ----------------------------------------------------------------------
+#  协方差矩阵 & 相关残差构造
+# ----------------------------------------------------------------------
+def build_covariance(bs_samples_fit, mode="full", eps=1e-12):
+    """
+    由 bootstrap 样本构造协方差矩阵。
+
+    参数
+    ----
+    bs_samples_fit : array, shape (N_bootstrap, N_data)
+        限制到拟合区间 [tmin, tmax] 后的 bootstrap 样本。
+    mode : {"full", "diag"}
+        "full" : 使用完整协方差矩阵。
+        "diag" : 将 off-diagonal 元素置 0，只保留对角线。
+    eps : float
+        对角线上加入的小 regularization，避免数值上非正定。
+
+    返回
+    ----
+    cov_matrix : array, shape (N_data, N_data)
+    """
+    # np.cov 默认是无偏估计，rowvar=False 表示每一列是一个变量（对应一个时间点）
+    cov = np.cov(bs_samples_fit, rowvar=False, ddof=1)
+
+    if mode == "diag":
+        cov = np.diag(np.diag(cov))
+
+    # 数值 regularization：在对角线上加一份小的噪声，保证正定
+    diag = np.diag(cov)
+    avg_diag = np.mean(diag) if diag.size > 0 else 1.0
+    jitter = eps * avg_diag if avg_diag > 0 else eps
+    cov = cov + jitter * np.eye(cov.shape[0])
+
+    return cov
 
 
-def residuals_two_cosh(params, t_data, y_data, y_err, T):
-    model = two_cosh_func(params, t_data, T)
-    return (y_data - model) / y_err
+def make_correlated_residuals(C, model_func, T):
+    """
+    构造 correlated residual 函数，使用 Cholesky 分解。
+
+    给定协方差矩阵 C，我们做
+        C = L L^T,   (L 下三角)
+        C^{-1} = (L^{-1})^T L^{-1}
+
+    对于残差 r = y - f(p, t)，
+        chi^2 = r^T C^{-1} r
+              = (L^{-1} r)^T (L^{-1} r)
+    所以 least_squares 中的 residual 可以定义为
+        res = L^{-1} r
+
+    这里采用你给出的形式：
+        def residuals(params, x, y):
+            model = f(params, x)
+            r = y - model
+            return Linv @ r
+
+    只是多加了 model_func 和 T 在闭包中。
+    """
+    L = np.linalg.cholesky(C)
+    Linv = np.linalg.inv(L)
+
+    def residuals(params, t_data, y_data):
+        model = model_func(params, t_data, T)
+        r = y_data - model
+        return Linv @ r  # correlated residual
+
+    return residuals
 
 
-def one_state_direct_fit(t_fit, y_fit, y_err_fit, T, initial_params, bounds):
-
-    result = least_squares(
-        residuals_one_cosh,
-        x0=np.array([initial_params["A0"], initial_params["m0"]]),
-        args=(t_fit, y_fit, y_err_fit, T),
-        bounds=bounds,
-        method="trf",
-    )
-
-    fitted_params = {"A0": result.x[0], "m0": result.x[1]}
-    redchi2 = get_redchi2(result, len(y_fit), len(initial_params))
-    chi2 = get_chi2(result)
-    # redchi2 = get_redchi2_manual(fitted_params, t_fit, y_fit, y_err_fit, T)
-    return fitted_params, result.success, chi2, redchi2
-
-
-def two_state_direct_fit(t_fit, y_fit, y_err_fit, T, initial_params, bounds):
-
-    result = least_squares(
-        residuals_two_cosh,
-        x0=np.array(
-            [
-                initial_params["A0"],
-                initial_params["m0"],
-                initial_params["A1"],
-                initial_params["m1"],
-            ]
-        ),
-        args=(t_fit, y_fit, y_err_fit, T),
-        bounds=bounds,
-        method="trf",
-    )
-
-    fitted_params = {
-        "A0": result.x[0],
-        "m0": result.x[1],
-        "A1": result.x[2],
-        "m1": result.x[3],
-    }
-
-    redchi2 = get_redchi2(result, len(y_fit), len(initial_params))
-    chi2 = get_chi2(result)
-    return fitted_params, result.success, chi2, redchi2
-
-
-def one_state_bootstrap_fit(
-    t_fit,
-    bs_samples,
-    sigma_fit,
-    T,
-    initial_params,
-    bounds,
-):
-    n_bootstrap = bs_samples.shape[0]
-    fitted_params_list = []
-    success_list = []
-    redchi2_list = []
-    chi2_list = []
-
-    for i in range(n_bootstrap):
-        y_fit = bs_samples[i]
-
-        fitted_params, success, chi2, redchi2 = one_state_direct_fit(
-            t_fit, y_fit, sigma_fit, T, initial_params, bounds
-        )
-        fitted_params_list.append(fitted_params)
-        success_list.append(success)
-        chi2_list.append(chi2)
-        redchi2_list.append(redchi2)
-
-    return fitted_params_list, success_list, chi2_list, redchi2_list
-
-
-def two_state_bootstrap_fit(
-    t_fit,
-    bs_samples,
-    sigma_fit,
-    T,
-    initial_params,
-    bounds,
-):
-    n_bootstrap = bs_samples.shape[0]
-    fitted_params_list = []
-    success_list = []
-    chi2_list = []
-    redchi2_list = []
-
-    for i in range(n_bootstrap):
-        y_fit = bs_samples[i]
-
-        fitted_params, success, chi2, redchi2 = two_state_direct_fit(
-            t_fit, y_fit, sigma_fit, T, initial_params, bounds
-        )
-        fitted_params_list.append(fitted_params)
-        success_list.append(success)
-        chi2_list.append(chi2)
-        redchi2_list.append(redchi2)
-
-    return fitted_params_list, success_list, chi2_list, redchi2_list
-
-
-def prepare_p2_bs_samples(path, isCorrelated=False):
-    # sigma used for uncorrelated fitting
-    bs_samples = np.load(path)  # shape (n_bootstrap, n_data)
-    # sigma = np.std(bs_samples, axis=0, ddof=1) / (len(bs_samples))
-    # sigma = np.std(bs_samples, axis=0, ddof=1)
-    cov_matrix = np.cov(bs_samples, rowvar=False)
-    if isCorrelated:
-        sigma = cov_matrix
-    else:
-        sigma = np.sqrt(np.diag(cov_matrix))
-
-    return bs_samples, sigma
-
-
-def run_one_state_fit(path, T, tmin, tmax, savepath=None):
-    bs_samples, sigma = prepare_p2_bs_samples(path)
-    t = np.arange(len(sigma))
-    mask = (t >= tmin) & (t <= tmax)
-    t_fit = t[mask]
-    bs_samples_fit = bs_samples[:, mask]
-    sigma_fit = sigma[mask]
-
-    initial_params = {"A0": 1e-15, "m0": 0.6}
-    bounds = ([0, 0.55], [1e-14, 0.70])
-    fitted_params_list, success_list, chi2_list, redchi2_list = one_state_bootstrap_fit(
-        t_fit, bs_samples_fit, sigma_fit, T, initial_params, bounds
-    )
-
-    A0_list = [params["A0"] for params in fitted_params_list if params is not None]
-    m0_list = [params["m0"] for params in fitted_params_list if params is not None]
-    print("Number of successful fits:", sum(success_list), "out of", len(success_list))
-    result_dict = {
-        "A0_list": A0_list,
-        "m0_list": m0_list,
-        "success_list": success_list,
-        "chi2_list": chi2_list,
-        "redchi2_list": redchi2_list,
-    }
-    if savepath is not None:
-        np.savez(savepath, **result_dict)
-        print(f"Saved fit results to {savepath}")
-    return result_dict
-
-
-def run_two_state_fit(path, T, tmin, tmax, savepath=None):
-    bs_samples, sigma = prepare_p2_bs_samples(path)
-    t = np.arange(len(sigma))
-    mask = (t >= tmin) & (t <= tmax)
-    t_fit = t[mask]
-    bs_samples_fit = bs_samples[:, mask]
-    sigma_fit = sigma[mask]
-
-    initial_params = {"A0": 3.65e-15, "m0": 0.5961, "A1": 2.84e-25, "m1": 1.10}
-    bounds = ([0, 0.55, 0, 0.8], [1e-14, 0.65, 1e-24, 1.3])
-
-    fitted_params_list, success_list, chi2_list, redchi2_list = two_state_bootstrap_fit(
-        t_fit, bs_samples_fit, sigma_fit, T, initial_params, bounds
-    )
-    A0_list = [params["A0"] for params in fitted_params_list if params is not None]
-    m0_list = [params["m0"] for params in fitted_params_list if params is not None]
-    A1_list = [params["A1"] for params in fitted_params_list if params is not None]
-    m1_list = [params["m1"] for params in fitted_params_list if params is not None]
-    print("Number of successful fits:", sum(success_list), "out of", len(success_list))
-    result_dict = {
-        "A0_list": A0_list,
-        "m0_list": m0_list,
-        "A1_list": A1_list,
-        "m1_list": m1_list,
-        "success_list": success_list,
-        "chi2_list": chi2_list,
-        "redchi2_list": redchi2_list,
-    }
-    if savepath is not None:
-        np.savez(savepath, **result_dict)
-        print(f"Saved fit results to {savepath}")
-    return result_dict
-
-
-def result_plot(t, y_mean, y_err, result_dict, T, state="one"):
-    print(t.shape, y_mean.shape, y_err.shape)
-    plt.figure(figsize=(8, 5))
-    plt.errorbar(
-        t,
-        y_mean,
-        y_err,
-        fmt="o",
-        label=r"$data\ \hat{p}^2=0$",
-        markersize=4,
-    )
-
-    plt.plot(t, y_fit, label=label_fit, color="red")
-    plt.xlabel("t")
-    plt.ylabel("C(t)")
-    plt.yscale("log")
-    plt.title("Bootstrap Fit Result")
-    plt.legend()
-    plt.grid()
-    plt.show()
-
-
+# ----------------------------------------------------------------------
+#  单次 correlated 拟合（one-state, two-state）
+# ----------------------------------------------------------------------
 def get_redchi2(result, n_data, n_param):
     dof = n_data - n_param
     redchi2 = np.sum(result.fun**2) / dof
@@ -249,31 +122,315 @@ def get_chi2(result):
     return chi2
 
 
+def one_state_direct_fit(
+    t_fit,
+    y_fit,
+    cov_matrix,
+    T,
+    initial_params,
+    bounds,
+):
+    """
+    对单个 bootstrap 样本进行 one-state *correlated* 拟合。
+    使用相同的 cov_matrix (由全部 bootstrap 样本给出)。
+    """
+    residuals = make_correlated_residuals(cov_matrix, one_cosh_func, T)
+
+    result = least_squares(
+        residuals,
+        x0=np.array([initial_params["A0"], initial_params["m0"]]),
+        args=(t_fit, y_fit),
+        bounds=bounds,
+        method="trf",
+    )
+
+    fitted_params = {"A0": result.x[0], "m0": result.x[1]}
+    chi2 = get_chi2(result)
+    redchi2 = get_redchi2(result, len(t_fit), len(initial_params))
+
+    return fitted_params, result.success, chi2, redchi2
+
+
+def two_state_direct_fit(
+    t_fit,
+    y_fit,
+    cov_matrix,
+    T,
+    initial_params,
+    bounds,
+):
+    """
+    对单个 bootstrap 样本进行 two-state *correlated* 拟合。
+    """
+    residuals = make_correlated_residuals(cov_matrix, two_cosh_func, T)
+
+    result = least_squares(
+        residuals,
+        x0=np.array(
+            [
+                initial_params["A0"],
+                initial_params["m0"],
+                initial_params["A1"],
+                initial_params["m1"],
+            ]
+        ),
+        args=(t_fit, y_fit),
+        bounds=bounds,
+        method="trf",
+    )
+
+    fitted_params = {
+        "A0": result.x[0],
+        "m0": result.x[1],
+        "A1": result.x[2],
+        "m1": result.x[3],
+    }
+    chi2 = get_chi2(result)
+    redchi2 = get_redchi2(result, len(t_fit), len(initial_params))
+
+    return fitted_params, result.success, chi2, redchi2
+
+
+# ----------------------------------------------------------------------
+#  bootstrap correlated 拟合（对所有 bootstrap 样本）
+# ----------------------------------------------------------------------
+def one_state_bootstrap_fit(
+    t_fit,
+    bs_samples_fit,
+    cov_matrix,
+    T,
+    initial_params,
+    bounds,
+):
+    """
+    对所有 bootstrap 样本做 one-state correlated 拟合。
+    """
+    n_bootstrap = bs_samples_fit.shape[0]
+    fitted_params_list = []
+    success_list = []
+    chi2_list = []
+    redchi2_list = []
+
+    for i in range(n_bootstrap):
+        y_fit = bs_samples_fit[i]
+
+        fitted_params, success, chi2, redchi2 = one_state_direct_fit(
+            t_fit, y_fit, cov_matrix, T, initial_params, bounds
+        )
+        fitted_params_list.append(fitted_params)
+        success_list.append(success)
+        chi2_list.append(chi2)
+        redchi2_list.append(redchi2)
+
+    return fitted_params_list, success_list, chi2_list, redchi2_list
+
+
+def two_state_bootstrap_fit(
+    t_fit,
+    bs_samples_fit,
+    cov_matrix,
+    T,
+    initial_params,
+    bounds,
+):
+    """
+    对所有 bootstrap 样本做 two-state correlated 拟合。
+    """
+    n_bootstrap = bs_samples_fit.shape[0]
+    fitted_params_list = []
+    success_list = []
+    chi2_list = []
+    redchi2_list = []
+
+    for i in range(n_bootstrap):
+        y_fit = bs_samples_fit[i]
+
+        fitted_params, success, chi2, redchi2 = two_state_direct_fit(
+            t_fit, y_fit, cov_matrix, T, initial_params, bounds
+        )
+        fitted_params_list.append(fitted_params)
+        success_list.append(success)
+        chi2_list.append(chi2)
+        redchi2_list.append(redchi2)
+
+    return fitted_params_list, success_list, chi2_list, redchi2_list
+
+
+# ----------------------------------------------------------------------
+#  高层封装：读入文件、选取 [tmin, tmax]、构造协方差并做拟合
+# ----------------------------------------------------------------------
+def run_one_state_fit(
+    path,
+    T,
+    tmin,
+    tmax,
+    savepath=None,
+    cov_mode="full",
+    eps=1e-12,
+):
+    """
+    对给定 p^2、给定 [tmin, tmax] 区间做 one-state *correlated* bootstrap 拟合。
+
+    参数
+    ----
+    path : str
+        npy 文件路径，形状 (N_bootstrap, N_t)。
+    T : int
+        时间方向长度。
+    tmin, tmax : int
+        拟合时间窗口。
+    savepath : str or None
+        若给出，则将结果以 npz 保存。
+    cov_mode : {"full", "diag"}
+        "full": 使用完整协方差矩阵。
+        "diag": 将 off-diagonal 置 0，但仍用 correlated 残差形式。
+    eps : float
+        协方差矩阵 regularization 参数。
+    """
+    bs_samples = np.load(path)  # shape (N_bootstrap, N_t)
+    n_t = bs_samples.shape[1]
+    t_all = np.arange(n_t)
+
+    mask = (t_all >= tmin) & (t_all <= tmax)
+    t_fit = t_all[mask]
+    bs_samples_fit = bs_samples[:, mask]
+
+    # 基于拟合窗口的 bootstrap 样本构造协方差矩阵
+    cov_matrix = build_covariance(bs_samples_fit, mode=cov_mode, eps=eps)
+
+    initial_params = {"A0": 1e-15, "m0": 0.6}
+    bounds = ([0.0, 0.55], [1e-14, 0.70])
+
+    fitted_params_list, success_list, chi2_list, redchi2_list = one_state_bootstrap_fit(
+        t_fit, bs_samples_fit, cov_matrix, T, initial_params, bounds
+    )
+
+    A0_list = [params["A0"] for params in fitted_params_list if params is not None]
+    m0_list = [params["m0"] for params in fitted_params_list if params is not None]
+
+    print(
+        "Number of successful one-state fits:",
+        sum(success_list),
+        "out of",
+        len(success_list),
+    )
+
+    result_dict = {
+        "A0_list": A0_list,
+        "m0_list": m0_list,
+        "success_list": success_list,
+        "chi2_list": chi2_list,
+        "redchi2_list": redchi2_list,
+        "tmin": tmin,
+        "tmax": tmax,
+        "cov_mode": cov_mode,
+    }
+
+    if savepath is not None:
+        np.savez(savepath, **result_dict)
+        print(f"Saved correlated one-state fit results to {savepath}")
+
+    return result_dict
+
+
+def run_two_state_fit(
+    path,
+    T,
+    tmin,
+    tmax,
+    savepath=None,
+    cov_mode="full",
+    eps=1e-12,
+):
+    """
+    对给定 p^2、给定 [tmin, tmax] 区间做 two-state *correlated* bootstrap 拟合。
+    """
+    bs_samples = np.load(path)  # shape (N_bootstrap, N_t)
+    n_t = bs_samples.shape[1]
+    t_all = np.arange(n_t)
+
+    mask = (t_all >= tmin) & (t_all <= tmax)
+    t_fit = t_all[mask]
+    bs_samples_fit = bs_samples[:, mask]
+
+    cov_matrix = build_covariance(bs_samples_fit, mode=cov_mode, eps=eps)
+
+    initial_params = {
+        "A0": 3.65e-15,
+        "m0": 0.5961,
+        "A1": 2.84e-25,
+        "m1": 1.10,
+    }
+    bounds = ([0.0, 0.55, 0.0, 0.8], [1e-14, 0.65, 1e-24, 1.3])
+
+    fitted_params_list, success_list, chi2_list, redchi2_list = two_state_bootstrap_fit(
+        t_fit, bs_samples_fit, cov_matrix, T, initial_params, bounds
+    )
+
+    A0_list = [params["A0"] for params in fitted_params_list if params is not None]
+    m0_list = [params["m0"] for params in fitted_params_list if params is not None]
+    A1_list = [params["A1"] for params in fitted_params_list if params is not None]
+    m1_list = [params["m1"] for params in fitted_params_list if params is not None]
+
+    print(
+        "Number of successful two-state fits:",
+        sum(success_list),
+        "out of",
+        len(success_list),
+    )
+
+    result_dict = {
+        "A0_list": A0_list,
+        "m0_list": m0_list,
+        "A1_list": A1_list,
+        "m1_list": m1_list,
+        "success_list": success_list,
+        "chi2_list": chi2_list,
+        "redchi2_list": redchi2_list,
+        "tmin": tmin,
+        "tmax": tmax,
+        "cov_mode": cov_mode,
+    }
+
+    if savepath is not None:
+        np.savez(savepath, **result_dict)
+        print(f"Saved correlated two-state fit results to {savepath}")
+
+    return result_dict
+
+
+# ----------------------------------------------------------------------
+#  扫描 tmin 的封装（仍然可以直接调用）
+# ----------------------------------------------------------------------
 def scan_tmin_two_state(
     path,
     T,
     tmin_start=1,
     tmin_end=24,
     tmax=30,
-    outdir="./data/processed/mom/bs_fit_results/scan_two_state",
+    outdir="./data/processed/mom/bs_fit_results/scan_two_state_corr",
+    cov_mode="full",
+    eps=1e-12,
 ):
     """
-    扫描 tmin (固定 tmax=30) 进行 two-state bootstrap fit。
+    扫描 tmin (固定 tmax) 进行 two-state correlated bootstrap fit。
 
     对每个 tmin 产生文件：
-       two_state_tmin_{tmin}_tmax_{tmax}.npz
+       two_state_corr_tmin_{tmin}_tmax_{tmax}.npz
     """
 
     os.makedirs(outdir, exist_ok=True)
 
-    print(f"[Two-state Scan] tmin={tmin_start} → {tmin_end} (tmax={tmax})")
+    print(f"[Two-state Correlated Scan] tmin={tmin_start} → {tmin_end} (tmax={tmax})")
     print("-" * 60)
 
     for tmin in range(tmin_start, tmin_end + 1):
 
-        savefile = f"{outdir}/two_state_tmin_{tmin}_tmax_{tmax}.npz"
+        savefile = f"{outdir}/two_state_corr_tmin_{tmin}_tmax_{tmax}.npz"
 
-        print(f"Running two-state fit: tmin={tmin}, tmax={tmax}")
+        print(
+            f"Running two-state correlated fit: tmin={tmin}, tmax={tmax}, cov_mode={cov_mode}"
+        )
 
         result_dict = run_two_state_fit(
             path=path,
@@ -281,12 +438,14 @@ def scan_tmin_two_state(
             tmin=tmin,
             tmax=tmax,
             savepath=savefile,
+            cov_mode=cov_mode,
+            eps=eps,
         )
 
         avg_redchi2 = np.mean(result_dict["redchi2_list"])
         print(f"Saved: {savefile}, avg redchi2 = {avg_redchi2:.5f}")
 
-    print("Two-state scan finished.\n")
+    print("Two-state correlated scan finished.\n")
 
 
 def scan_tmin_one_state(
@@ -295,25 +454,29 @@ def scan_tmin_one_state(
     tmin_start=1,
     tmin_end=24,
     tmax=30,
-    outdir="./data/processed/mom/bs_fit_results/scan_one_state",
+    outdir="./data/processed/mom/bs_fit_results/scan_one_state_corr",
+    cov_mode="full",
+    eps=1e-12,
 ):
     """
-    扫描 tmin (固定 tmax=30) 进行 one-state bootstrap fit。
+    扫描 tmin (固定 tmax) 进行 one-state correlated bootstrap fit。
 
     对每个 tmin 产生文件：
-       one_state_tmin_{tmin}_tmax_{tmax}.npz
+       one_state_corr_tmin_{tmin}_tmax_{tmax}.npz
     """
 
     os.makedirs(outdir, exist_ok=True)
 
-    print(f"[One-state Scan] tmin={tmin_start} → {tmin_end} (tmax={tmax})")
+    print(f"[One-state Correlated Scan] tmin={tmin_start} → {tmin_end} (tmax={tmax})")
     print("-" * 60)
 
     for tmin in range(tmin_start, tmin_end + 1):
 
-        savefile = f"{outdir}/one_state_tmin_{tmin}_tmax_{tmax}.npz"
+        savefile = f"{outdir}/one_state_corr_tmin_{tmin}_tmax_{tmax}.npz"
 
-        print(f"Running one-state fit: tmin={tmin}, tmax={tmax}")
+        print(
+            f"Running one-state correlated fit: tmin={tmin}, tmax={tmax}, cov_mode={cov_mode}"
+        )
 
         result_dict = run_one_state_fit(
             path=path,
@@ -321,16 +484,21 @@ def scan_tmin_one_state(
             tmin=tmin,
             tmax=tmax,
             savepath=savefile,
+            cov_mode=cov_mode,
+            eps=eps,
         )
 
         avg_redchi2 = np.mean(result_dict["redchi2_list"])
         print(f"Saved: {savefile}, avg redchi2 = {avg_redchi2:.5f}")
 
-    print("One-state scan finished.\n")
+    print("One-state correlated scan finished.\n")
 
 
+# ----------------------------------------------------------------------
+#  AICc / m0 / plateau 等工具函数（几乎原样保留）
+# ----------------------------------------------------------------------
 def get_redchi2_nmin(path):
-    filelist = sorted(glob.glob(os.path.join(path, "two_state_tmin_*_tmax_*.npz")))
+    filelist = sorted(glob.glob(os.path.join(path, "two_state*_tmin_*_tmax_*.npz")))
     tmin_list = []
     redchi2_list = []
     for filepath in filelist:
@@ -348,16 +516,6 @@ def get_redchi2_nmin(path):
 def add_chi2(path, n_param=4):
     """
     根据保存的 redchi2_list 计算并补充 chi2_list 。
-
-    参数
-    ----
-    path : str
-        包含 *.npz 拟合结果文件的目录。
-        文件名假定形如:
-            one_state_tmin_{tmin}_tmax_{tmax}.npz
-            two_state_tmin_{tmin}_tmax_{tmax}.npz
-    n_param : int
-        拟合参数个数，默认 4（two-state）。对于 one-state 可显式传入 2。
     """
     filelist = sorted(glob.glob(os.path.join(path, "*_tmin_*_tmax_*.npz")))
     for filepath in filelist:
@@ -367,14 +525,12 @@ def add_chi2(path, n_param=4):
         basename = os.path.basename(filepath).replace(".npz", "")
         parts = basename.split("_")
 
-        # 解析 tmin / tmax
         try:
             i_tmin = parts.index("tmin")
             tmin = int(parts[i_tmin + 1])
             i_tmax = parts.index("tmax")
             tmax = int(parts[i_tmax + 1])
         except ValueError:
-            # 回退到旧的命名规则: {state}_tmin_{tmin}_tmax_{tmax}
             tmin = int(parts[3])
             tmax = int(parts[5])
 
@@ -395,12 +551,9 @@ def get_aicc(chi2, n_data, n_param):
     """
     Calculate the corrected Akaike Information Criterion (AICc).
 
-    在高斯误差、以标准化残差定义 chi2 的情形下，常用的形式是
+    在以 chi2 = r^T C^{-1} r 定义的情形下，常用形式：
         AIC  = chi2 + 2*k
         AICc = chi2 + 2*k + 2*k*(k+1)/(n - k - 1)
-
-    其中 k = n_param 为参数个数，n = n_data 为参与拟合的数据点数。
-    这里忽略与模型无关的常数项。
     """
     aic = chi2 + 2 * n_param
     correction = (2 * n_param * (n_param + 1)) / (n_data - n_param - 1)
@@ -410,12 +563,7 @@ def get_aicc(chi2, n_data, n_param):
 def get_bootstrap_aicc(path):
     """
     读取指定目录下的 *_tmin_*_tmax_*.npz 文件，利用其中的 chi2_list
-    计算各个 tmin 的平均 AICc，返回 {tmin: <AICc 平均>} 的字典。
-
-    要求 npz 文件名形如:
-        one_state_tmin_{tmin}_tmax_{tmax}.npz   (k=2)
-        two_state_tmin_{tmin}_tmax_{tmax}.npz   (k=4)
-    并且文件内已包含 chi2_list。
+    计算各个 tmin 的平均 AICc。
     """
     filelist = sorted(glob.glob(os.path.join(path, "*_tmin_*_tmax_*.npz")))
     aicc_results = {}
@@ -427,32 +575,25 @@ def get_bootstrap_aicc(path):
         basename = os.path.basename(filepath).replace(".npz", "")
         parts = basename.split("_")
 
-        # 判定是一态还是二态
-        if basename.startswith("one_state"):
+        if "one_state" in basename:
             n_param = 2
-        elif basename.startswith("two_state"):
+        elif "two_state" in basename:
             n_param = 4
         else:
-            raise ValueError(
-                f"Cannot infer number of parameters from filename: {basename}"
-            )
+            raise ValueError(f"Cannot infer n_param from filename: {basename}")
 
-        # 解析 tmin / tmax
         try:
             i_tmin = parts.index("tmin")
             tmin = int(parts[i_tmin + 1])
             i_tmax = parts.index("tmax")
             tmax = int(parts[i_tmax + 1])
         except ValueError:
-            # 回退到旧的命名规则: {state}_tmin_{tmin}_tmax_{tmax}
             tmin = int(parts[3])
             tmax = int(parts[5])
 
         n_data = tmax - tmin + 1
-
         aicc_vals = [get_aicc(chi2, n_data, n_param) for chi2 in chi2_vals]
         avg_aicc = np.mean(aicc_vals)
-
         aicc_results[tmin] = avg_aicc
 
     return aicc_results
@@ -461,11 +602,6 @@ def get_bootstrap_aicc(path):
 def get_bootstrap_m0(path):
     """
     读取指定目录下的 *_tmin_*_tmax_*.npz 文件，返回 {tmin: (m0_mean,m0_error)} 的字典。
-
-    要求 npz 文件名形如:
-        one_state_tmin_{tmin}_tmax_{tmax}.npz
-        two_state_tmin_{tmin}_tmax_{tmax}.npz
-    并且文件内已包含 m0_list。
     """
     filelist = sorted(glob.glob(os.path.join(path, "*_tmin_*_tmax_*.npz")))
     m0_results = {}
@@ -477,12 +613,10 @@ def get_bootstrap_m0(path):
         basename = os.path.basename(filepath).replace(".npz", "")
         parts = basename.split("_")
 
-        # 解析 tmin / tmax
         try:
             i_tmin = parts.index("tmin")
             tmin = int(parts[i_tmin + 1])
         except ValueError:
-            # 回退到旧的命名规则: {state}_tmin_{tmin}_tmax_{tmax}
             tmin = int(parts[3])
 
         m0_mean = np.mean(m0_vals)
@@ -495,19 +629,12 @@ def get_bootstrap_m0(path):
 def select_best_fit_by_aicc(one_state_dir, two_state_dir):
     """
     读取一态与二态目录中所有 tmin 对应的 AICc，
-    对每个 tmin 比较两种模型的 AICc，
-    返回 {tmin: (best_model, best_aicc)} 的字典。
-
-    best_model ∈ {"one_state", "two_state"}
+    对每个 tmin 比较两种模型的 AICc。
     """
-
-    # 复用你已有的 AICc 读取函数
     aicc_one = get_bootstrap_aicc(one_state_dir)
     aicc_two = get_bootstrap_aicc(two_state_dir)
 
-    # 收集所有 tmin（两个目录的并集）
     all_tmins = sorted(set(aicc_one.keys()) | set(aicc_two.keys()))
-
     best_results = {}
 
     for t in all_tmins:
@@ -525,14 +652,6 @@ def select_best_fit_by_aicc(one_state_dir, two_state_dir):
 def get_best_m0_sequence(best_selection, m0_one, m0_two):
     """
     根据 best_selection（AICc best）选择最优模型的 m0(tmin)
-    输入:
-        best_selection: {tmin: ("one_state"/"two_state", aicc)}
-        m0_one: {tmin: (m_mean, m_err)}
-        m0_two: {tmin: (m_mean, m_err)}
-    输出:
-        tmin_vals: sorted list
-        m_best:    [m_mean_i]
-        m_err:     [m_err_i]
     """
     tmin_vals = sorted(best_selection.keys())
 
@@ -554,21 +673,13 @@ def get_best_m0_sequence(best_selection, m0_one, m0_two):
 def weighted_plateau_average(n_lower, n_upper, m_vals, m_errs):
     """
     加权 plateau average。
-
-    参数：
-        n_lower:     plateau 左端点 index
-        n_upper:     plateau 右端点 index
-        m_vals:      array of mean m0(tmin)
-        m_errs:      array of error m0_err(tmin)
-    返回：
-        weighted_avg, weighted_stat_err, weighted_sys_err
     """
     m_plateau = m_vals[n_lower : n_upper + 1]
     err_plateau = m_errs[n_lower : n_upper + 1]
 
-    partA = 1 / (err_plateau**2)
+    partA = 1.0 / (err_plateau**2)
     averaged_m = np.sum(m_plateau * partA) / np.sum(partA)
-    stat_err = np.sqrt(1 / np.sum(partA))
+    stat_err = np.sqrt(1.0 / np.sum(partA))
     sys_err = np.sqrt(np.mean((m_plateau - np.mean(m_plateau)) ** 2))
 
     return averaged_m, stat_err, sys_err
@@ -585,24 +696,14 @@ def plot_plateau(
     outpath=None,
 ):
     """
-    画出类似论文中的 plateau 平均图。
-
-    参数：
-        n_list : 1D array, 横轴 (例如 n_sigma_min)
-        m_vals : 1D array, 拟合得到的质量 M(tmin)
-        m_errs : 1D array, 对应误差
-        n_lower, n_upper : plateau 的左右端点（Python index）
-        outpath : 若给出字符串，则保存到该路径；否则只显示
+    画出 plateau 平均图（与原文件一致）。
     """
-    # 先做 plateau average
     m_avg, stat_err, sys_err = weighted_plateau_average(
         n_lower, n_upper, m_vals, m_errs
     )
 
-    # 画图
     fig, ax = plt.subplots(figsize=(6.4, 4.0))
 
-    # 所有点的误差条（红色）
     ax.errorbar(
         n_list,
         m_vals,
@@ -616,11 +717,9 @@ def plot_plateau(
         linestyle="none",
     )
 
-    # 整个横轴范围（为了画带）
     x_min = np.min(n_list) - 0.5
     x_max = np.max(n_list) + 0.5
 
-    # 红色：系统误差带
     ax.fill_between(
         [x_min, x_max],
         m_avg - sys_err,
@@ -630,7 +729,6 @@ def plot_plateau(
         label="syst",
     )
 
-    # 蓝色：统计误差带
     ax.fill_between(
         [x_min, x_max],
         m_avg - stat_err,
@@ -640,10 +738,8 @@ def plot_plateau(
         label="stat",
     )
 
-    # 蓝色中心线（平均值）
     ax.axhline(m_avg, color="blue", linewidth=1.2)
 
-    # （可选）用浅灰色标出 plateau 选取的区间
     ax.axvspan(
         n_list[n_lower] - 0.5,
         n_list[n_upper] + 0.5,
@@ -652,12 +748,9 @@ def plot_plateau(
         zorder=0,
     )
 
-    # 标题 & 坐标轴
     ax.set_title("red: syst, blue: stat", fontsize=11)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-
-    # 细一点的坐标轴风格
     ax.tick_params(direction="in", top=True, right=True)
     ax.set_xlim(x_min, x_max)
 
@@ -667,32 +760,20 @@ def plot_plateau(
         fig.savefig(outpath, dpi=300)
     plt.show()
 
-    # 顺便把数值也打印一下，方便检查
     print(f"plateau range: indices [{n_lower}, {n_upper}]")
     print(f"<M> = {m_avg:.6f}")
     print(f"stat err = {stat_err:.6f}")
     print(f"syst err = {sys_err:.6f}")
+
+    return m_avg, stat_err, sys_err
 
 
 def gaussian_plateau_averaging(
     tmin_vals, m_vals, m_errs, plateau_range, n_samples=5000, plot=True
 ):
     """
-    Gaussian plateau averaging following Sandmeyer PhD Sec. 4.3.4.
-
-    参数：
-        tmin_vals:   list of tmin
-        m_vals:      array of mean m0(tmin)
-        m_errs:      array of error m0_err(tmin)
-        plateau_range: (tmin_left, tmin_right)，例如 (9,15)
-        n_samples:   bootstrap 样本数
-        plot:        是否绘图（论文风格）
-
-    返回：
-        median, (err_minus, err_plus), samples
+    Gaussian plateau averaging (与原文件一致)。
     """
-
-    # ---- 选取 plateau 区间 ----
     tmin_left, tmin_right = plateau_range
 
     mask = [(t >= tmin_left) and (t <= tmin_right) for t in tmin_vals]
@@ -700,37 +781,25 @@ def gaussian_plateau_averaging(
     err_plateau = m_errs[mask]
     t_plateau = np.array(tmin_vals)[mask]
 
-    # ---- Gaussian bootstrap ----
-    # 对 plateau 中的每个点都生成 n_samples 个随机噪声
-    # 假设它们 fully correlated → 合并为一个总体分布
     combined_samples = []
-
     for i in range(len(m_plateau)):
-        # 每个点的 Gaussian 分布
         samples_i = np.random.normal(
             loc=m_plateau[i], scale=err_plateau[i], size=n_samples
         )
         combined_samples.append(samples_i)
 
-    # shape = (num_plateau_points, n_samples)
     combined_samples = np.array(combined_samples)
-
-    # 合并为一个一维分布（论文明确指出需要将所有点合并）
-    # Flatten 所有 plateau 点的 sample
     merged = combined_samples.flatten()
 
-    # ---- final statistics ----
     median = np.median(merged)
     low = np.percentile(merged, 16)
     high = np.percentile(merged, 84)
     err_minus = median - low
     err_plus = high - median
 
-    # ---- 绘图（论文 Figure 4.7 风格） ----
     if plot:
         fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-        # (1) 左图：m(tmin) plateau 区域
         axes[0].errorbar(
             tmin_vals,
             m_vals,
@@ -762,7 +831,6 @@ def gaussian_plateau_averaging(
         axes[0].grid(True)
         axes[0].legend()
 
-        # (2) 右图：Histogram（论文 Figure 4.7 右图）
         axes[1].hist(merged, bins=50, color="gray", edgecolor="black", density=True)
         axes[1].axvline(median, color="red", linestyle="--", label="median")
         axes[1].axvline(low, color="blue", linestyle="--", label="16%")
@@ -779,141 +847,6 @@ def gaussian_plateau_averaging(
 
 
 if __name__ == "__main__":
-    # inpath = "./data/processed/mom/bs_samples/phi_p2_0_bs.npy"
-    # outpath1 = "./data/processed/mom/bs_fit_results/one_state_fit_results1.npz"
-    # outpath2 = "./data/processed/mom/bs_fit_results/two_state_fit_results2.npz"
-    # outpath3 = "./data/processed/mom/bs_fit_results/two_state_fit_results3.npz"
-    # inpath2 = "/home/george/Documents/WorkSpace/Lattice/corr_fit/data/processed/mom/bs_fit_results/scan_two_state/two_state_tmin_5_tmax_30.npz"
-    savepath2 = "/home/george/Documents/WorkSpace/Lattice/corr_fit/data/processed/mom/bs_fit_results/test/two_state"
-    savepath1 = "/home/george/Documents/WorkSpace/Lattice/corr_fit/data/processed/mom/bs_fit_results/test/one_state"
-
-    best_fit = select_best_fit_by_aicc(savepath1, savepath2)
-    m0_one = get_bootstrap_m0(savepath1)
-    m0_two = get_bootstrap_m0(savepath2)
-    # m0_one_means = [m0_one[t][0] for t in sorted(m0_one.keys())]
-    # m0_two_means = [m0_two[t][0] for t in sorted(m0_two.keys())]
-    # m0_one_errs = [m0_one[t][1] for t in sorted(m0_one.keys())]
-    # m0_two_errs = [m0_two[t][1] for t in sorted(m0_two.keys())]
-    tmin_vals, m0_best, m0_err = get_best_m0_sequence(best_fit, m0_one, m0_two)
-
-    # plateau averaging
-    # tmin = 6
-    # tmax = 24
-
-    # n_lower = tmin_vals.index(tmin)
-    # n_upper = tmin_vals.index(tmax)
-    # plot_plateau(
-    #     n_list=tmin_vals,
-    #     m_vals=m0_best,
-    #     m_errs=m0_err,
-    #     n_lower=n_lower,
-    #     n_upper=n_upper,
-    #     xlabel=r"$n_{\sigma,\min}$",
-    #     ylabel=r"a$m_0$",
-    #     outpath=None,
-    # )
-
-    # plot m0 of one state, two state and best selected
-    # plt.figure(figsize=(8, 5))
-    # plt.errorbar(
-    #     tmin_vals,
-    #     m0_one_means,
-    #     yerr=m0_one_errs,
-    #     fmt="o",
-    #     capsize=3,
-    #     label="one-state",
-    # )
-    # plt.errorbar(
-    #     tmin_vals,
-    #     m0_two_means,
-    #     yerr=m0_two_errs,
-    #     fmt="s",
-    #     capsize=3,
-    #     label="two-state",
-    # )
-    # plt.errorbar(
-    #     tmin_vals,
-    #     m0_best,
-    #     yerr=m0_err,
-    #     fmt="o",
-    #     capsize=3,
-    #     label="AICc selected",
-    # )
-    # plt.xlabel(r"$n_{\sigma,min}$")
-    # plt.ylabel(r"a$m_0$")
-    # plt.grid()
-    # plt.legend()
-    # plt.show()
-
-    # compare aicc of one state and two state
-    # plt.figure(figsize=(8, 5))
-    # plt.plot(tmin_vals, aicc_vals1, marker="o")
-    # plt.plot(tmin_vals, aicc_vals2, marker="s")
-    # plt.plot(tmin_vals, aicc_min, marker="^")
-    # plt.legend(["one-state", "two-state", "min(AICc)"])
-    # plt.xlabel(r"$n_{\sigma,min}$")
-    # plt.ylabel("AICc")
-    # plt.ylim(0, 30)
-    # plt.grid()
-    # plt.show()
-
-    # get m0 of diff tmin
-    # m0 = get_bootstrap_m0(savepath2)
-    # m0_one = get_bootstrap_m0(savepath1)
-    # plt.figure(figsize=(8, 5))
-    # tmin_vals = sorted(m0.keys())
-    # m0_means = [m0[tmin][0] for tmin in tmin_vals]
-    # m0_errors = [m0[tmin][1] for tmin in tmin_vals]
-    # m0_one_means = [m0_one[tmin][0] for tmin in tmin_vals]
-    # m0_one_errors = [m0_one[tmin][1] for tmin in tmin_vals]
-    # plt.errorbar(
-    #     tmin_vals,
-    #     m0_means,
-    #     yerr=m0_errors,
-    #     fmt="o",
-    #     capsize=3,
-    # )
-    # plt.errorbar(
-    #     tmin_vals,
-    #     m0_one_means,
-    #     yerr=m0_one_errors,
-    #     fmt="s",
-    #     capsize=3,
-    # )
-    # plt.legend(["two-state", "one-state"])
-    # plt.xlabel(r"$n_{\sigma,min}$")
-    # plt.ylabel(r"a$m_0$")
-    # plt.grid()
-    # plt.show()
-
-    # scan_tmin_one_state(
-    #     path=inpath,
-    #     T=96,
-    #     tmin_start=1,
-    #     tmin_end=24,
-    #     tmax=30,
-    #     outdir=savepath1,
-    # )
-
-    # m0 of diff tmin
-    # tmin_list, m0_list = get_redchi2_nmin(savepath2)
-
-    # # aicc of diff tmin
-    # aicc_results1 = get_bootstrap_aicc(savepath1)
-    # aicc_results2 = get_bootstrap_aicc(savepath2)
-    # tmin_vals = sorted(aicc_results1.keys())
-    # aicc_vals1 = [aicc_results1[tmin] for tmin in tmin_vals]
-    # aicc_vals2 = [aicc_results2[tmin] for tmin in tmin_vals]
-
-    # # print(aicc_vals1)
-    # # print(aicc_vals2)
-
-    # plt.figure(figsize=(8, 5))
-    # plt.plot(tmin_vals, aicc_vals1, marker="o")
-    # plt.plot(tmin_vals, aicc_vals2, marker="s")
-    # plt.legend(["one-state", "two-state"])
-    # plt.xlabel(r"$n_{\sigma,min}$")
-    # plt.ylabel("AICc")
-    # plt.ylim(0, 30)
-    # plt.grid()
-    # plt.show()
+    # 这里不做实际运行，只留作简单示例/自测接口。
+    # 你可以在 main.py 中 import 本模块并调用 run_one_state_fit / run_two_state_fit。
+    pass
